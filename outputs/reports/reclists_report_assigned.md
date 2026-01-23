@@ -1,6 +1,6 @@
 # Relatório de Geração de Listas Top-20 (ALL-BETWEEN)
 
-**Data de geração**: 2026-01-20 12:25:42
+**Data de geração**: 2026-01-22 10:25:25
 
 ## Resumo Geral
 
@@ -28,8 +28,8 @@
 
 - **Total de itens recomendados**: 12,040
 - **Usuários únicos**: 198
-- **Notícias únicas**: 734
-- **Score médio**: 0.7799
+- **Notícias únicas**: 792
+- **Score médio**: 0.8549
 - **Score mínimo**: -0.0805
 - **Score máximo**: 1.0000
 

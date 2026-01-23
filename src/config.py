@@ -20,7 +20,7 @@ SURPRISE_PARAMS = {
         'k': 5,
         'min_k': 1,
         'sim_options': {
-            'name': 'pearson',
+            'name': 'pearson_baseline',
             'user_based': True,
             'shrinkage': 100  # Shrinkage para reduzir overfitting
         }
@@ -29,7 +29,7 @@ SURPRISE_PARAMS = {
         'k': 5,
         'min_k': 1,
         'sim_options': {
-            'name': 'pearson',
+            'name': 'pearson_baseline',
             'user_based': False,
             'shrinkage': 100  # Shrinkage para reduzir overfitting
         }

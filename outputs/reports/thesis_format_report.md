@@ -1,6 +1,6 @@
 # Relatório de Geração de Tabelas no Formato da Tese
 
-Total de pares de avaliação: 1811
+Total de pares de avaliação: 1965
 Total de listas top-20: 12040
 Algoritmos: knni, knni mmr, knni td, knnu, knnu mmr, knnu td, svd, svd mmr, svd td
 
@@ -10,17 +10,17 @@ Arquivo: `tabela_6_1_GH_interacao.csv`
 
 ### Usuários por algoritmo:
 
-- **knnu**: 4 usuários
+- **knnu**: 5 usuários
 - **knnu td**: 25 usuários
-- **knnu mmr**: 16 usuários
+- **knnu mmr**: 19 usuários
 - **knni**: 12 usuários
-- **knni td**: 25 usuários
-- **knni mmr**: 20 usuários
+- **knni td**: 27 usuários
+- **knni mmr**: 21 usuários
 - **svd**: 4 usuários
 - **svd**: 19 usuários
 - **svd**: 22 usuários
 
-**Usuários excluídos**: 11 (< 2 itens expostos)
+**Usuários excluídos**: 4 (< 2 itens expostos)
 
 ## Tabela 6.6: GH (Cosseno - Listas)
 
@@ -48,12 +48,12 @@ Arquivo: `tabela_6_3_RMSE.csv`
 
 - **knni**: 12 usuários
 - **svd**: 4 usuários
-- **knnu**: 4 usuários
+- **knnu**: 5 usuários
 - **knnu td**: 25 usuários
 - **svd**: 20 usuários
-- **knni td**: 25 usuários
-- **knnu mmr**: 17 usuários
+- **knni td**: 27 usuários
+- **knnu mmr**: 19 usuários
 - **svd**: 22 usuários
-- **knni mmr**: 20 usuários
+- **knni mmr**: 21 usuários
 
-**Usuários excluídos**: 9 (< 2 pares de avaliação)
+**Usuários excluídos**: 3 (< 2 pares de avaliação)

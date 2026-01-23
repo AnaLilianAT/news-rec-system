@@ -1,6 +1,6 @@
 # Relatório de Treino e Score (Assigned)
 
-**Data de geração:** 2026-01-20 12:25:16
+**Data de geração:** 2026-01-22 10:25:09
 
 ---
 
