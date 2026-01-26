@@ -1,25 +1,25 @@
 # Relatório de Treino e Score (Assigned)
 
-**Data de geração:** 2026-01-22 10:25:09
+**Data de geração:** 2026-01-26 10:10:51
 
 ---
 
 ## 1. Resumo do Processamento
 
-- **Total de checkpoints processados:** 602
-- **Timestamps únicos (t_rec):** 602
+- **Total de checkpoints processados:** 775
+- **Timestamps únicos (t_rec):** 775
 - **Checkpoints pulados:** 0
 - **Taxa de sucesso:** 100.0%
 
 ## 2. Treinamentos Executados
 
-- **Total de treinamentos:** 602
-- **Tamanho médio do treino:** 4888 interações
+- **Total de treinamentos:** 775
+- **Tamanho médio do treino:** 5528 interações
 
 **Treinamentos por algoritmo:**
-- **KNNU:** 159 treinos (26.4%)
-- **KNNI:** 302 treinos (50.2%)
-- **SVD:** 141 treinos (23.4%)
+- **KNNU:** 228 treinos (29.4%)
+- **KNNI:** 347 treinos (44.8%)
+- **SVD:** 200 treinos (25.8%)
 
 ## 3. Otimização
 
@@ -31,9 +31,9 @@ Este pipeline implementa otimização inteligente:
 - ✅ Evita treinos desnecessários
 
 **Economia de treinamentos:**
-- Máximo possível (sem otimização): 1,806 treinos
-- Executados (com otimização): 602 treinos
-- **Economia: 1,204 treinos (66.7%)**
+- Máximo possível (sem otimização): 2,325 treinos
+- Executados (com otimização): 775 treinos
+- **Economia: 1,550 treinos (66.7%)**
 
 ---
 

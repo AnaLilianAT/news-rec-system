@@ -42,7 +42,7 @@ def identify_candidate_pools(df_rec_sessions: pd.DataFrame) -> pd.DataFrame:
     
     Candidate pools são sessões com:
     - diversifed = False
-    - list_size >= 97 (idealmente 100)
+    - list_size >= 20
     
     Args:
         df_rec_sessions: DataFrame com sessões de recomendação
@@ -54,10 +54,10 @@ def identify_candidate_pools(df_rec_sessions: pd.DataFrame) -> pd.DataFrame:
     print("IDENTIFICANDO CANDIDATE POOLS")
     print("="*70)
     
-    # Filtrar sessões não-diversificadas com list_size >= 97
+    # Filtrar sessões não-diversificadas com list_size >= 20
     candidate_pools = df_rec_sessions[
         (df_rec_sessions['diversifed'] == False) & 
-        (df_rec_sessions['list_size'] >= 97)
+        (df_rec_sessions['list_size'] >= 20)
     ].copy()
     
     print(f"✓ Candidate pools identificados: {len(candidate_pools):,} sessões")

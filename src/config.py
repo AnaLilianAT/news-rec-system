@@ -6,7 +6,7 @@ Configurações globais do pipeline de replay temporal.
 RANDOM_SEED = 42
 
 # Tamanho mínimo de candidate pool para processar checkpoint
-MIN_CANDIDATE_SIZE = 97
+MIN_CANDIDATE_SIZE = 20
 
 # Tamanho de batch para processamento incremental
 BATCH_SIZE = 100
