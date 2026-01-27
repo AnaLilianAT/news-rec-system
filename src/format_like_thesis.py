@@ -102,7 +102,9 @@ def compute_GH_interaction_jaccard(eval_pairs: pd.DataFrame, topics: pd.DataFram
     Para cada usuário:
     - Pegar itens expostos (do eval_pairs)
     - Calcular Jaccard entre todos os pares de itens (usando tópicos)
-    - GH_user = média dos Jaccards
+    - GH_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
+    
+    IMPORTANTE: Usa normalização por |R| (não por #pares) para reproduzir escala da tese.
     
     Retorna DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
     """
@@ -135,7 +137,9 @@ def compute_GH_interaction_jaccard(eval_pairs: pd.DataFrame, topics: pd.DataFram
                 jaccards.append(jacc)
         
         if len(jaccards) > 0:
-            gh_user = np.mean(jaccards)
+            # CORREÇÃO: Normalizar por |R| (Equação 4.3 da tese), não por #pares
+            # GH_user = (1/|R|) × Σ_{i<j} Jaccard(i,j)
+            gh_user = np.sum(jaccards) / len(items)
             results.append({
                 'user_id': user_id,
                 'algorithm': algorithm,
