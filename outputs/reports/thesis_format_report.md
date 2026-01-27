@@ -17,8 +17,8 @@ Arquivo: `tabela_6_1_GH_interacao.csv`
 - **knni td**: 27 usuários
 - **knni mmr**: 21 usuários
 - **svd**: 25 usuários
-- **svd**: 19 usuários
-- **svd**: 22 usuários
+- **svd td**: 22 usuários
+- **svd mmr**: 19 usuários
 
 **Usuários excluídos**: 5 (< 2 itens expostos)
 
@@ -35,8 +35,8 @@ Arquivo: `tabela_6_6_GH_listas.csv`
 - **knni td**: 32 usuários
 - **knni mmr**: 29 usuários
 - **svd**: 26 usuários
-- **svd**: 27 usuários
-- **svd**: 29 usuários
+- **svd td**: 29 usuários
+- **svd mmr**: 27 usuários
 
 **Usuários excluídos**: 0 (listas com < 2 itens válidos)
 
@@ -50,10 +50,10 @@ Arquivo: `tabela_6_3_RMSE.csv`
 - **svd**: 25 usuários
 - **knnu**: 24 usuários
 - **knnu td**: 25 usuários
-- **svd**: 20 usuários
+- **svd mmr**: 20 usuários
 - **knni td**: 27 usuários
-- **knnu mmr**: 19 usuários
+- **knnu mmr mmr**: 19 usuários
 - **svd**: 22 usuários
-- **knni mmr**: 21 usuários
+- **knni mmr mmr**: 21 usuários
 
 **Usuários excluídos**: 4 (< 2 pares de avaliação)

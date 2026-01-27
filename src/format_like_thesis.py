@@ -34,18 +34,24 @@ def normalize_algorithm_name(raw: str) -> str:
     
     raw = str(raw).lower().strip()
     
-    # Detectar sufixos
+    # Detectar sufixos (ordem importa: topic antes de mmr)
     suffix = ""
-    if "topic" in raw and "divers" in raw:
+    if "topic" in raw:
         suffix = " td"
+        # Remover todas as variações de topic-diversification
         raw = raw.replace("-topic-diversification", "").replace("_topic_diversification", "")
         raw = raw.replace("topic-diversification", "").replace("topic_diversification", "")
-    elif "mmr" in raw and "divers" in raw:
+        raw = raw.replace("-topic-divers", "").replace("_topic_divers", "")
+        raw = raw.replace("-topic", "").replace("_topic", "")
+    elif "mmr" in raw:
         suffix = " mmr"
+        # Remover todas as variações de mmr-diversification
         raw = raw.replace("-mmr-diversification", "").replace("_mmr_diversification", "")
         raw = raw.replace("mmr-diversification", "").replace("mmr_diversification", "")
+        raw = raw.replace("-mmr-divers", "").replace("_mmr_divers", "")
+        raw = raw.replace("-mmr", "").replace("_mmr", "")
     
-    # Normalizar base
+    # Normalizar base (remover separadores restantes)
     raw = raw.replace("-", "_").strip("_")
     
     if "user" in raw and "knn" in raw:
@@ -281,7 +287,8 @@ def aggregate_like_thesis(
         if len(values) == 0:
             continue
         
-        row = {'Algoritmo': normalize_algorithm_name(algorithm)}
+        # IMPORTANTE: Não normalizar novamente - o algorithm já vem normalizado
+        row = {'Algoritmo': algorithm}
         
         if include_users:
             row['Usuários'] = len(values)
