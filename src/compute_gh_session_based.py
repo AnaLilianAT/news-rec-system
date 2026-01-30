@@ -95,16 +95,16 @@ def main():
     topics_path = outputs_dir / "canonical_topics.parquet"
     
     if not eval_pairs_path.exists():
-        print(f"\n❌ ERRO: {eval_pairs_path} não encontrado")
+        print(f"\nERRO: {eval_pairs_path} não encontrado")
         return 1
     if not topics_path.exists():
-        print(f"\n❌ ERRO: {topics_path} não encontrado")
+        print(f"\nERRO: {topics_path} não encontrado")
         return 1
     
-    print("\n✓ Arquivos encontrados")
+    print("\nArquivos encontrados")
     
     # Carregar dados
-    print("\n📂 Carregando dados...")
+    print("\nCarregando dados...")
     eval_pairs = pd.read_parquet(eval_pairs_path)
     topics = pd.read_parquet(topics_path)
     
@@ -112,17 +112,17 @@ def main():
     print(f"  - topics: {len(topics)} notícias")
     
     # Normalizar nomes de algoritmos
-    print("\n🔄 Normalizando nomes de algoritmos...")
+    print("\nNormalizando nomes de algoritmos...")
     eval_pairs['algorithm'] = eval_pairs['algorithm'].apply(normalize_algorithm_name)
     print(f"  - Algoritmos: {', '.join(sorted(eval_pairs['algorithm'].unique()))}")
     
     # Construir dicionário de tópicos
-    print("\n🔧 Construindo dicionário de tópicos...")
+    print("\nConstruindo dicionário de tópicos...")
     topics_dict = build_topics_dict(topics)
     print(f"  - {len(topics_dict)} notícias com tópicos")
     
     # ETAPA 1: Calcular GH por sessão
-    print("\n🔧 ETAPA 1: Calculando GH por sessão...")
+    print("\nETAPA 1: Calculando GH por sessão...")
     print("  (para cada user_id, t_rec, algorithm)")
     
     session_results = []
@@ -146,15 +146,15 @@ def main():
             })
     
     df_sessions = pd.DataFrame(session_results)
-    print(f"  ✓ {len(df_sessions)} sessões válidas (|R_session| >= 2)")
+    print(f"  {len(df_sessions)} sessões válidas (|R_session| >= 2)")
     
     # Exportar dados de sessão
     session_path = debug_dir / "gh_sessions_level.csv"
     df_sessions.to_csv(session_path, index=False)
-    print(f"  ✓ Dados salvos: {session_path}")
+    print(f"  Dados salvos: {session_path}")
     
     # ETAPA 2: Agregar por usuário (média de sessões)
-    print("\n🔧 ETAPA 2: Agregando por usuário (GH_user = média de GH_session)...")
+    print("\nETAPA 2: Agregando por usuário (GH_user = média de GH_session)...")
     
     user_results = []
     
@@ -174,15 +174,15 @@ def main():
             })
     
     df_users = pd.DataFrame(user_results)
-    print(f"  ✓ {len(df_users)} usuários processados")
+    print(f"  {len(df_users)} usuários processados")
     
     # Exportar dados de usuário
     user_path = debug_dir / "gh_user_session_based.csv"
     df_users.to_csv(user_path, index=False)
-    print(f"  ✓ Dados salvos: {user_path}")
+    print(f"  Dados salvos: {user_path}")
     
     # ETAPA 3: Agregar por algoritmo (Tabela 6.1)
-    print("\n📊 ETAPA 3: Agregando por algoritmo (Tabela 6.1)...")
+    print("\nETAPA 3: Agregando por algoritmo (Tabela 6.1)...")
     
     algo_results = []
     
@@ -226,10 +226,10 @@ def main():
     print("=" * 80)
     print(df_table61.to_string(index=False))
     
-    print(f"\n✓ Tabela salva: {table61_path}")
+    print(f"\nTabela salva: {table61_path}")
     
     # ETAPA 4: Comparação com abordagem global
-    print("\n📊 ETAPA 4: Comparação com abordagem global...")
+    print("\nETAPA 4: Comparação com abordagem global...")
     
     # Carregar dados da auditoria (abordagem global)
     audit_path = debug_dir / "R_size_audit.csv"
@@ -273,10 +273,10 @@ def main():
         # Exportar comparação
         comp_path = debug_dir / "gh_session_vs_global_comparison.csv"
         df_comp_stats.to_csv(comp_path, index=False)
-        print(f"\n✓ Comparação salva: {comp_path}")
+        print(f"\nComparação salva: {comp_path}")
     
     # Gerar relatório
-    print("\n📝 Gerando relatório...")
+    print("\nGerando relatório...")
     report_lines = []
     
     report_lines.append("# Tabela 6.1 - GH por Sessão (Abordagem da Tese)\n")
@@ -330,12 +330,12 @@ def main():
         avg_std_reduction = df_comp_stats['std_reduction'].mean()
         
         if avg_std_reduction > 0.5:
-            report_lines.append(f"✅ **Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
+            report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
             report_lines.append("A abordagem por sessão reduziu drasticamente a variância,")
             report_lines.append("confirmando que a acumulação de itens de múltiplas sessões")
             report_lines.append("estava distorcendo a métrica.\n")
         else:
-            report_lines.append(f"⚠️ **Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
+            report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
             report_lines.append("A redução de variância foi menor que o esperado.\n")
         
         # Checar valores GH
@@ -347,18 +347,18 @@ def main():
         report_lines.append(f"**Intervalo da tese**: [0.72, 0.76]\n")
         
         if 0.65 <= gh_session_mean <= 0.85:
-            report_lines.append("✅ **Escala aproximada da tese alcançada!**\n")
+            report_lines.append("**Escala aproximada da tese alcançada!**\n")
         elif gh_session_mean > 1.0:
-            report_lines.append("⚠️ **Valores ainda acima de 1.0 - revisar normalização**\n")
+            report_lines.append("**Valores ainda acima de 1.0 - revisar normalização**\n")
     
     # Salvar relatório
     report_path = reports_dir / "table61_session_based_report.md"
     report_path.write_text("\n".join(report_lines), encoding='utf-8')
     
-    print(f"\n✓ Relatório salvo: {report_path}")
+    print(f"\nRelatório salvo: {report_path}")
     
     print("\n" + "=" * 80)
-    print("✅ PROCESSO CONCLUÍDO")
+    print("PROCESSO CONCLUÍDO")
     print("=" * 80)
     print("\nArquivos gerados:")
     print(f"  1. {session_path} (sessões individuais)")

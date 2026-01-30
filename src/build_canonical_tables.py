@@ -45,7 +45,7 @@ def build_interactions(ratings: pd.DataFrame, news_ratings: pd.DataFrame) -> pd.
     # Ordenar por timestamp
     df_interactions = df_interactions.sort_values('rating_when').reset_index(drop=True)
     
-    print(f"✓ Interações criadas: {len(df_interactions)} registros")
+    print(f"Interações criadas: {len(df_interactions)} registros")
     print(f"  → Usuários únicos: {df_interactions['user_id'].nunique()}")
     print(f"  → Notícias únicas: {df_interactions['news_id'].nunique()}")
     print(f"  → Período: {df_interactions['rating_when'].min()} a {df_interactions['rating_when'].max()}")
@@ -92,7 +92,7 @@ def build_rec_sessions(recLists: pd.DataFrame) -> pd.DataFrame:
     # Ordenar por timestamp
     sessions = sessions.sort_values('generated_when').reset_index(drop=True)
     
-    print(f"✓ Sessões criadas: {len(sessions)} registros")
+    print(f"Sessões criadas: {len(sessions)} registros")
     print(f"  → Usuários únicos: {sessions['user_id'].nunique()}")
     print(f"  → Período: {sessions['generated_when'].min()} a {sessions['generated_when'].max()}")
     print(f"\n  Distribuição de list_size:")
@@ -135,7 +135,7 @@ def build_features_and_topics(features_df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     for col in topic_cols_sorted:
         df_topics[col] = df_topics[col].astype(int)
     
-    print(f"✓ Topics extraídos: {len(df_topics)} notícias")
+    print(f"Topics extraídos: {len(df_topics)} notícias")
     print(f"  → Colunas de topics: {len(topic_cols_sorted)} ({topic_cols_sorted[0]}..{topic_cols_sorted[-1]})")
     
     # Contar quantos topics por notícia
@@ -161,7 +161,7 @@ def build_features_and_topics(features_df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     has_polaridade = 'polaridade' in df_features.columns
     has_subjetividade = 'subjetividade' in df_features.columns
     
-    print(f"\n✓ Features construídas: {len(df_features)} notícias, {len(df_features.columns)-1} features")
+    print(f"\nFeatures construídas: {len(df_features)} notícias, {len(df_features.columns)-1} features")
     print(f"  → Colunas principais: news_id, {', '.join(df_features.columns[1:6].tolist())}...")
     if has_polaridade:
         print(f"  → Polaridade: média={df_features['polaridade'].mean():.3f}, std={df_features['polaridade'].std():.3f}")
@@ -171,7 +171,7 @@ def build_features_and_topics(features_df: pd.DataFrame) -> Tuple[pd.DataFrame, 
     # Verificar valores nulos
     null_counts = df_features.isnull().sum()
     if null_counts.sum() > 0:
-        print(f"\n  ⚠ Valores nulos encontrados:")
+        print(f"\n  Valores nulos encontrados:")
         for col, count in null_counts[null_counts > 0].items():
             print(f"    {col}: {count} ({count/len(df_features)*100:.1f}%)")
     
@@ -214,7 +214,7 @@ def save_canonical_tables(
         filepath = output_path / filename
         df.to_parquet(filepath, index=False, engine='pyarrow')
         file_size = filepath.stat().st_size / 1024  # KB
-        print(f"✓ Salvo {filename}: {len(df)} linhas, {file_size:.1f} KB")
+        print(f"Salvo {filename}: {len(df)} linhas, {file_size:.1f} KB")
     
     print("\n" + "="*70)
     print("SALVAMENTO CONCLUÍDO")

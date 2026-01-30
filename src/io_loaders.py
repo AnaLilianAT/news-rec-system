@@ -20,10 +20,10 @@ def load_tsv(path: str, encoding: str = 'utf-8', sep: str = '\t') -> pd.DataFram
     """
     try:
         df = pd.read_csv(path, sep=sep, encoding=encoding)
-        print(f"✓ Carregado {path}: {len(df)} linhas, {len(df.columns)} colunas")
+        print(f"Carregado {path}: {len(df)} linhas, {len(df.columns)} colunas")
         return df
     except Exception as e:
-        print(f"✗ Erro ao carregar {path}: {e}")
+        print(f"Erro ao carregar {path}: {e}")
         raise
 
 
@@ -58,7 +58,7 @@ def load_features_semicolon(path: str = 'features/join_features_selecionadas.csv
         DataFrame com as features
     """
     df = pd.read_csv(path, sep=';', encoding='utf-8')
-    print(f"✓ Carregado {path}: {len(df)} linhas, {len(df.columns)} colunas")
+    print(f"Carregado {path}: {len(df)} linhas, {len(df.columns)} colunas")
     return df
 
 

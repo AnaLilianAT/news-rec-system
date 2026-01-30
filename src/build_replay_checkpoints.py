@@ -30,8 +30,8 @@ def load_canonical_data(base_path='outputs'):
     df_rec_sessions = pd.read_parquet(base_path / 'canonical_rec_sessions.parquet')
     df_interactions = pd.read_parquet(base_path / 'canonical_interactions.parquet')
     
-    print(f"✓ Sessões de recomendação: {len(df_rec_sessions):,} registros")
-    print(f"✓ Interações: {len(df_interactions):,} registros")
+    print(f"Sessões de recomendação: {len(df_rec_sessions):,} registros")
+    print(f"Interações: {len(df_interactions):,} registros")
     
     return df_rec_sessions, df_interactions
 
@@ -60,7 +60,7 @@ def identify_candidate_pools(df_rec_sessions: pd.DataFrame) -> pd.DataFrame:
         (df_rec_sessions['list_size'] >= 20)
     ].copy()
     
-    print(f"✓ Candidate pools identificados: {len(candidate_pools):,} sessões")
+    print(f"Candidate pools identificados: {len(candidate_pools):,} sessões")
     print(f"  → De um total de {len(df_rec_sessions):,} sessões")
     print(f"  → Percentual: {len(candidate_pools)/len(df_rec_sessions)*100:.1f}%")
     
@@ -110,14 +110,14 @@ def build_replay_checkpoints(
             'list_size': row['list_size']
         }
     
-    print(f"\n✓ Dicionário de candidate pools criado: {len(pool_dict):,} entradas")
+    print(f"\nDicionário de candidate pools criado: {len(pool_dict):,} entradas")
     
     # Agrupar sessões por usuário e obter timestamps únicos
     user_sessions = df_rec_sessions.groupby('user_id')['generated_when'].apply(
         lambda x: sorted(set(x.tolist()))  # Usar set para remover duplicatas
     ).to_dict()
     
-    print(f"✓ Usuários com sessões: {len(user_sessions):,}")
+    print(f"Usuários com sessões: {len(user_sessions):,}")
     
     # Construir checkpoints
     checkpoints = []
@@ -159,7 +159,7 @@ def build_replay_checkpoints(
     
     df_checkpoints = pd.DataFrame(checkpoints)
     
-    print(f"\n✓ Checkpoints construídos: {len(df_checkpoints):,} registros")
+    print(f"\nCheckpoints construídos: {len(df_checkpoints):,} registros")
     print(f"  → Com candidate pool: {checkpoints_with_pool:,} ({checkpoints_with_pool/len(df_checkpoints)*100:.1f}%)")
     print(f"  → Sem candidate pool: {len(df_checkpoints) - checkpoints_with_pool:,} ({(len(df_checkpoints) - checkpoints_with_pool)/len(df_checkpoints)*100:.1f}%)")
     print(f"  → Usuários únicos: {df_checkpoints['user_id'].nunique():,}")
@@ -240,7 +240,7 @@ def generate_replay_report(
             f.write(f"- Mínimo: {with_pools['candidate_size'].min()} itens\n")
             f.write(f"- Máximo: {with_pools['candidate_size'].max()} itens\n\n")
         else:
-            f.write("⚠️ Nenhum checkpoint com candidate pool encontrado.\n\n")
+            f.write("Nenhum checkpoint com candidate pool encontrado.\n\n")
         
         # ========================================
         # 3. CHECKPOINTS POR USUÁRIO
@@ -322,9 +322,9 @@ def generate_replay_report(
                 temporal_errors += 1
         
         if temporal_errors == 0:
-            f.write("✓ **Ordenação temporal:** Todos os checkpoints têm t_next_rec > t_rec\n\n")
+            f.write("**Ordenação temporal:** Todos os checkpoints têm t_next_rec > t_rec\n\n")
         else:
-            f.write(f"⚠️ **Ordenação temporal:** {temporal_errors} checkpoints com t_next_rec ≤ t_rec\n\n")
+            f.write(f"**Ordenação temporal:** {temporal_errors} checkpoints com t_next_rec ≤ t_rec\n\n")
         
         # Verificar consistência de candidate_size
         size_errors = 0
@@ -337,14 +337,14 @@ def generate_replay_report(
         if size_errors == 0:
             f.write("✓ **Consistência de candidate_size:** Todos os tamanhos estão corretos\n\n")
         else:
-            f.write(f"⚠️ **Consistência de candidate_size:** {size_errors} checkpoints com inconsistência\n\n")
+            f.write(f"**Consistência de candidate_size:** {size_errors} checkpoints com inconsistência\n\n")
         
         # Verificar duplicatas
         duplicates = df_checkpoints.duplicated(subset=['user_id', 't_rec']).sum()
         if duplicates == 0:
-            f.write("✓ **Duplicatas:** Nenhuma duplicata encontrada\n\n")
+            f.write("**Duplicatas:** Nenhuma duplicata encontrada\n\n")
         else:
-            f.write(f"⚠️ **Duplicatas:** {duplicates} checkpoints duplicados\n\n")
+            f.write(f"**Duplicatas:** {duplicates} checkpoints duplicados\n\n")
         
         # ========================================
         # 7. RECOMENDAÇÕES PARA USO
@@ -380,14 +380,14 @@ def generate_replay_report(
         f.write("### 7.2 Filtros Recomendados\n\n")
         
         if checkpoints_with_pool / total_checkpoints < 0.5:
-            f.write(f"⚠️ **Atenção:** Apenas {checkpoints_with_pool/total_checkpoints*100:.1f}% dos checkpoints têm candidate pool.\n")
+            f.write(f"**Atenção:** Apenas {checkpoints_with_pool/total_checkpoints*100:.1f}% dos checkpoints têm candidate pool.\n")
             f.write("- Considere filtrar apenas checkpoints com `has_candidate_pool == True`\n")
             f.write("- Ou implementar estratégia alternativa para checkpoints sem pool\n\n")
         
         # Identificar usuários com poucos checkpoints
         users_few_checkpoints = (checkpoints_per_user < 3).sum()
         if users_few_checkpoints > unique_users * 0.3:
-            f.write(f"⚠️ **Atenção:** {users_few_checkpoints} usuários ({users_few_checkpoints/unique_users*100:.1f}%) têm <3 checkpoints.\n")
+            f.write(f"**Atenção:** {users_few_checkpoints} usuários ({users_few_checkpoints/unique_users*100:.1f}%) têm <3 checkpoints.\n")
             f.write("- Considere filtrar usuários com ≥3 checkpoints para treino/validação consistente\n\n")
         
         f.write("### 7.3 Próximos Passos\n\n")
@@ -399,7 +399,7 @@ def generate_replay_report(
         f.write("---\n\n")
         f.write("*Relatório gerado automaticamente pelo pipeline de replay temporal*\n")
     
-    print(f"\n✓ Relatório de replay salvo em: {output_path}")
+    print(f"\nRelatório de replay salvo em: {output_path}")
 
 
 def save_replay_checkpoints(df_checkpoints: pd.DataFrame, output_path='outputs/replay_checkpoints.parquet'):
@@ -420,7 +420,7 @@ def save_replay_checkpoints(df_checkpoints: pd.DataFrame, output_path='outputs/r
     df_checkpoints.to_parquet(output_path, index=False, engine='pyarrow')
     
     file_size = output_path.stat().st_size / 1024  # KB
-    print(f"✓ Salvo {output_path.name}: {len(df_checkpoints):,} checkpoints, {file_size:.1f} KB")
+    print(f"Salvo {output_path.name}: {len(df_checkpoints):,} checkpoints, {file_size:.1f} KB")
     
     print("\n" + "="*70)
     print("SALVAMENTO CONCLUÍDO")

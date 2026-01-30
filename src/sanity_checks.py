@@ -61,7 +61,7 @@ def generate_ingestion_report(
         f.write("---\n\n")
         f.write("*Relatório gerado automaticamente pelo pipeline de ingestão*\n")
     
-    print(f"✓ Relatório de ingestão salvo em: {output_path}")
+    print(f"Relatório de ingestão salvo em: {output_path}")
 
 
 def generate_data_quality_report(
@@ -122,7 +122,7 @@ def generate_data_quality_report(
         
         if interactions_not_in_catalog > 0:
             pct = interactions_not_in_catalog / news_in_interactions * 100
-            f.write(f"⚠️ **Atenção:** {pct:.1f}% das notícias com interações não estão no catálogo\n\n")
+            f.write(f"**Atenção:** {pct:.1f}% das notícias com interações não estão no catálogo\n\n")
         
         # ========================================
         # 2. DISTRIBUIÇÕES
@@ -270,16 +270,16 @@ def generate_data_quality_report(
         issues = []
         
         if interactions_not_in_catalog > 0:
-            issues.append(f"⚠️ Existem {interactions_not_in_catalog} notícias nas interações que não estão no catálogo")
+            issues.append(f"Existem {interactions_not_in_catalog} notícias nas interações que não estão no catálogo")
         
         if interactions_without_features > 0:
-            issues.append(f"⚠️ Existem {interactions_without_features} notícias nas interações sem features")
+            issues.append(f"Existem {interactions_without_features} notícias nas interações sem features")
         
         if any(null_counts.sum() > 0 for _, null_counts in [(name, df.isnull().sum()) for name, df in tables.items()]):
-            issues.append("⚠️ Existem valores ausentes em algumas tabelas - considere estratégias de imputação")
+            issues.append("Existem valores ausentes em algumas tabelas - considere estratégias de imputação")
         
         if dup_interactions > 0 or dup_sessions > 0:
-            issues.append("⚠️ Existem registros duplicados - considere deduplificação")
+            issues.append("Existem registros duplicados - considere deduplificação")
         
         if len(issues) > 0:
             for issue in issues:
@@ -291,7 +291,7 @@ def generate_data_quality_report(
         f.write("\n---\n\n")
         f.write("*Relatório gerado automaticamente pelo pipeline de validação*\n")
     
-    print(f"✓ Relatório de qualidade salvo em: {output_path}")
+    print(f"Relatório de qualidade salvo em: {output_path}")
 
 
 def run_sanity_checks(

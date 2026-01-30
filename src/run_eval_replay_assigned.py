@@ -30,30 +30,30 @@ def load_eval_data(output_dir: Path = Path('outputs')):
     interactions_path = output_dir / 'canonical_interactions.parquet'
     interactions_df = pd.read_parquet(interactions_path)
     interactions_df['rating_when'] = pd.to_datetime(interactions_df['rating_when'], utc=True)
-    print(f"✓ Interações: {len(interactions_df):,}")
+    print(f"Interações: {len(interactions_df):,}")
     
     # Checkpoints replay
     checkpoints_path = output_dir / 'replay_checkpoints.parquet'
     checkpoints_df = pd.read_parquet(checkpoints_path)
     checkpoints_df['t_rec'] = pd.to_datetime(checkpoints_df['t_rec'], utc=True)
     checkpoints_df['t_next_rec'] = pd.to_datetime(checkpoints_df['t_next_rec'], utc=True)
-    print(f"✓ Checkpoints: {len(checkpoints_df):,}")
+    print(f"Checkpoints: {len(checkpoints_df):,}")
     
     # Listas top-20
     reclists_path = output_dir / 'reclists_top20_assigned.parquet'
     reclists_df = pd.read_parquet(reclists_path)
     reclists_df['t_rec'] = pd.to_datetime(reclists_df['t_rec'], utc=True)
-    print(f"✓ Listas top-20: {len(reclists_df):,}")
+    print(f"Listas top-20: {len(reclists_df):,}")
     
     # Features
     features_path = output_dir / 'canonical_features.parquet'
     features_df = pd.read_parquet(features_path)
-    print(f"✓ Features: {len(features_df):,}")
+    print(f"Features: {len(features_df):,}")
     
     # Tópicos
     topics_path = output_dir / 'canonical_topics.parquet'
     topics_df = pd.read_parquet(topics_path)
-    print(f"✓ Tópicos: {len(topics_df):,}")
+    print(f"Tópicos: {len(topics_df):,}")
     
     return interactions_df, checkpoints_df, reclists_df, features_df, topics_df
 
@@ -124,9 +124,9 @@ def build_eval_pairs(
     eval_pairs_df = pd.DataFrame(eval_pairs)
     
     exposure_rate = 100 * total_exposed / total_test_interactions if total_test_interactions > 0 else 0
-    print(f"✓ Total de interações no teste: {total_test_interactions:,}")
-    print(f"✓ Interações expostas (na top-20): {total_exposed:,} ({exposure_rate:.2f}%)")
-    print(f"✓ Eval pairs criados: {len(eval_pairs_df):,}")
+    print(f"Total de interações no teste: {total_test_interactions:,}")
+    print(f"Interações expostas (na top-20): {total_exposed:,} ({exposure_rate:.2f}%)")
+    print(f"Eval pairs criados: {len(eval_pairs_df):,}")
     
     return eval_pairs_df, total_test_interactions, total_exposed
 
@@ -185,8 +185,8 @@ def calculate_rmse_metrics(eval_pairs_df: pd.DataFrame) -> Tuple[pd.DataFrame, p
     
     rmse_by_user = pd.DataFrame(user_rmse_results)
     
-    print(f"✓ RMSE calculado para {len(rmse_by_algorithm)} algoritmos")
-    print(f"✓ RMSE por usuário: {len(rmse_by_user)} registros")
+    print(f"RMSE calculado para {len(rmse_by_algorithm)} algoritmos")
+    print(f"RMSE por usuário: {len(rmse_by_user)} registros")
     
     return rmse_by_algorithm, rmse_by_user
 
@@ -348,7 +348,7 @@ def calculate_gh_metrics(
     gh_jaccard_by_algo.columns = ['mean_gh_jaccard', 'median_gh_jaccard', 'std_gh_jaccard', 'n_lists']
     gh_jaccard_by_algo = gh_jaccard_by_algo.reset_index()
     
-    print(f"✓ GH calculado para {len(gh_df)} listas")
+    print(f"GH calculado para {len(gh_df)} listas")
     
     return gh_cosine_by_algo, gh_jaccard_by_algo, gh_df
 
@@ -384,7 +384,7 @@ def aggregate_user_metrics(
         how='outer'
     )
     
-    print(f"✓ Métricas agregadas para {user_metrics['user_id'].nunique()} usuários")
+    print(f"Métricas agregadas para {user_metrics['user_id'].nunique()} usuários")
     
     return user_metrics
 
@@ -417,27 +417,27 @@ def save_metrics(
     # Salvar eval_pairs
     eval_pairs_path = output_dir / 'eval_pairs_assigned.parquet'
     eval_pairs_df.to_parquet(eval_pairs_path, index=False)
-    print(f"✓ Eval pairs: {eval_pairs_path} ({len(eval_pairs_df):,} registros)")
+    print(f"Eval pairs: {eval_pairs_path} ({len(eval_pairs_df):,} registros)")
     
     # Salvar RMSE
     rmse_path = output_dir / 'metrics_rmse_by_algorithm_assigned.csv'
     rmse_by_algorithm.to_csv(rmse_path, index=False)
-    print(f"✓ RMSE por algorithm: {rmse_path}")
+    print(f"RMSE por algorithm: {rmse_path}")
     
     # Salvar GH cosine
     gh_cosine_path = output_dir / 'metrics_gh_cosine_by_algorithm_assigned.csv'
     gh_cosine_by_algo.to_csv(gh_cosine_path, index=False)
-    print(f"✓ GH cosine por algorithm: {gh_cosine_path}")
+    print(f"GH cosine por algorithm: {gh_cosine_path}")
     
     # Salvar GH Jaccard
     gh_jaccard_path = output_dir / 'metrics_gh_jaccard_by_algorithm_assigned.csv'
     gh_jaccard_by_algo.to_csv(gh_jaccard_path, index=False)
-    print(f"✓ GH Jaccard por algorithm: {gh_jaccard_path}")
+    print(f"GH Jaccard por algorithm: {gh_jaccard_path}")
     
     # Salvar métricas por usuário
     user_metrics_path = output_dir / 'user_level_metrics_assigned.parquet'
     user_metrics.to_parquet(user_metrics_path, index=False)
-    print(f"✓ Métricas por usuário: {user_metrics_path} ({len(user_metrics):,} registros)")
+    print(f"Métricas por usuário: {user_metrics_path} ({len(user_metrics):,} registros)")
     
     # Gerar relatório
     generate_report(
@@ -541,7 +541,7 @@ def generate_report(
         f.write("- **GH baixo**: Lista mais diversificada\n")
         f.write("- **Taxa de exposição**: Percentual de avaliações no teste que foram recomendadas\n")
     
-    print(f"✓ Relatório: {report_path}")
+    print(f"Relatório: {report_path}")
 
 
 def main():
@@ -561,7 +561,7 @@ def main():
     )
     
     if len(eval_pairs_df) == 0:
-        print("\n⚠ Nenhum eval_pair encontrado. Não há interações expostas para avaliar.")
+        print("\nNenhum eval_pair encontrado. Não há interações expostas para avaliar.")
         return
     
     # Calcular RMSE
@@ -570,10 +570,10 @@ def main():
     # Preparar vetores para GH
     print("\nPreparando vetores para GH...")
     feature_vectors = prepare_feature_vectors(features_df)
-    print(f"✓ Feature vectors: {len(feature_vectors):,}")
+    print(f"Feature vectors: {len(feature_vectors):,}")
     
     topic_vectors = prepare_topic_vectors(topics_df)
-    print(f"✓ Topic vectors: {len(topic_vectors):,}")
+    print(f"Topic vectors: {len(topic_vectors):,}")
     
     # Calcular GH
     gh_cosine_by_algo, gh_jaccard_by_algo, gh_df = calculate_gh_metrics(

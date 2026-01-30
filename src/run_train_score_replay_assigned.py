@@ -36,9 +36,9 @@ def load_replay_data(base_path='outputs', dataset_path='dataset'):
     df_interactions = pd.read_parquet(base_path / 'canonical_interactions.parquet')
     df_users = load_tsv(dataset_path / 'users.csv')
     
-    print(f"✓ Checkpoints: {len(df_checkpoints):,}")
-    print(f"✓ Interações: {len(df_interactions):,}")
-    print(f"✓ Usuários: {len(df_users):,}")
+    print(f"Checkpoints: {len(df_checkpoints):,}")
+    print(f"Interações: {len(df_interactions):,}")
+    print(f"Usuários: {len(df_users):,}")
     
     return df_checkpoints, df_interactions, df_users
 
@@ -84,7 +84,7 @@ def prepare_checkpoints(df_checkpoints: pd.DataFrame, df_user_algos: pd.DataFram
         (df_checkpoints['candidate_size'] >= MIN_CANDIDATE_SIZE)
     ].copy()
     
-    print(f"✓ Checkpoints válidos: {len(valid_checkpoints):,}/{len(df_checkpoints):,}")
+    print(f"Checkpoints válidos: {len(valid_checkpoints):,}/{len(df_checkpoints):,}")
     
     # Join com algoritmos dos usuários
     checkpoints_with_algo = valid_checkpoints.merge(
@@ -93,7 +93,7 @@ def prepare_checkpoints(df_checkpoints: pd.DataFrame, df_user_algos: pd.DataFram
         how='inner'
     )
     
-    print(f"✓ Checkpoints com algoritmo: {len(checkpoints_with_algo):,}")
+    print(f"Checkpoints com algoritmo: {len(checkpoints_with_algo):,}")
     
     # Ordenar por t_rec
     checkpoints_with_algo = checkpoints_with_algo.sort_values('t_rec').reset_index(drop=True)
@@ -113,7 +113,7 @@ def group_checkpoints_by_trec(df_checkpoints: pd.DataFrame) -> Dict[pd.Timestamp
     for t_rec, group in df_checkpoints.groupby('t_rec'):
         grouped[t_rec] = group
     
-    print(f"✓ Timestamps únicos: {len(grouped):,}")
+    print(f"Timestamps únicos: {len(grouped):,}")
     print(f"  → Checkpoints por t_rec (média): {len(df_checkpoints) / len(grouped):.1f}")
     
     # Estatísticas sobre algoritmos necessários por t_rec
@@ -155,7 +155,7 @@ def train_models_for_trec(
         models[algo] = model
         
         if VERBOSE:
-            print(f"✓ ({len(train_data):,} interações)")
+            print(f"({len(train_data):,} interações)")
     
     return models
 
@@ -239,7 +239,7 @@ def process_checkpoints_batch(
         
         if len(models) == 0:
             if VERBOSE:
-                print(f"    ⚠ Sem dados de treino, pulando...")
+                print(f"    Sem dados de treino, pulando...")
             stats['skipped_checkpoints'] += len(group)
             continue
         
@@ -263,7 +263,7 @@ def process_checkpoints_batch(
             all_predictions.extend(predictions)
     
     # Salvar predições
-    print(f"\n✓ Total de predições geradas: {len(all_predictions):,}")
+    print(f"\nTotal de predições geradas: {len(all_predictions):,}")
     
     if len(all_predictions) > 0:
         df_predictions = pd.DataFrame(all_predictions)
@@ -273,7 +273,7 @@ def process_checkpoints_batch(
         df_predictions.to_parquet(output_path, index=False, engine='pyarrow')
         
         file_size = output_path.stat().st_size / 1024  # KB
-        print(f"✓ Salvo: {output_path.name} ({file_size:.1f} KB)")
+        print(f"Salvo: {output_path.name} ({file_size:.1f} KB)")
     
     # Calcular estatísticas finais
     if len(stats['avg_train_size']) > 0:
@@ -317,10 +317,10 @@ def generate_train_score_report(
         
         f.write("\n## 3. Otimização\n\n")
         f.write("Este pipeline implementa otimização inteligente:\n\n")
-        f.write("- ✅ Agrupa checkpoints por `t_rec`\n")
-        f.write("- ✅ Treina apenas algoritmos necessários por `t_rec`\n")
-        f.write("- ✅ Cada usuário recebe predições do algoritmo atribuído\n")
-        f.write("- ✅ Evita treinos desnecessários\n\n")
+        f.write("- Agrupa checkpoints por `t_rec`\n")
+        f.write("- Treina apenas algoritmos necessários por `t_rec`\n")
+        f.write("- Cada usuário recebe predições do algoritmo atribuído\n")
+        f.write("- Evita treinos desnecessários\n\n")
         
         max_trainings = stats['total_trecs'] * 3  # 3 algoritmos por t_rec
         saved = max_trainings - stats['total_trainings']
@@ -332,7 +332,7 @@ def generate_train_score_report(
         f.write("---\n\n")
         f.write("*Relatório gerado automaticamente pelo pipeline de treino/score*\n")
     
-    print(f"✓ Relatório salvo: {output_path}")
+    print(f"Relatório salvo: {output_path}")
 
 
 def main():

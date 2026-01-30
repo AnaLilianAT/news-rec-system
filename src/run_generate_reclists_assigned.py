@@ -28,22 +28,22 @@ def load_input_data(output_dir: Path = Path('outputs')):
     # Predições scored
     predictions_path = output_dir / 'predictions_candidate_scored_assigned.parquet'
     predictions_df = pd.read_parquet(predictions_path)
-    print(f"✓ Predições: {len(predictions_df):,} registros")
+    print(f"Predições: {len(predictions_df):,} registros")
     
     # Features (para MMR)
     features_path = output_dir / 'canonical_features.parquet'
     features_df = pd.read_parquet(features_path)
-    print(f"✓ Features: {len(features_df):,} notícias")
+    print(f"Features: {len(features_df):,} notícias")
     
     # Tópicos (para TD)
     topics_path = output_dir / 'canonical_topics.parquet'
     topics_df = pd.read_parquet(topics_path)
-    print(f"✓ Tópicos: {len(topics_df):,} notícias")
+    print(f"Tópicos: {len(topics_df):,} notícias")
     
     # Usuários (para recuperar algoritmo original)
     users_path = Path('dataset') / 'users.csv'
     users_df = load_tsv(users_path)
-    print(f"✓ Usuários: {len(users_df):,} registros")
+    print(f"Usuários: {len(users_df):,} registros")
     
     return predictions_df, features_df, topics_df, users_df
 
@@ -84,7 +84,7 @@ def prepare_topic_vectors(topics_df: pd.DataFrame) -> Dict[int, np.ndarray]:
     available_topic_cols = [col for col in topic_cols if col in topics_df.columns]
     
     if not available_topic_cols:
-        print("⚠ Nenhuma coluna de tópicos encontrada em canonical_topics.parquet")
+        print("Nenhuma coluna de tópicos encontrada em canonical_topics.parquet")
         return {}
     
     topic_vectors = {}
@@ -203,7 +203,7 @@ def save_reclists(
     reclists_df.to_parquet(output_path, index=False)
     
     file_size_kb = output_path.stat().st_size / 1024
-    print(f"\n✓ Listas salvas: {output_path}")
+    print(f"\nListas salvas: {output_path}")
     print(f"  - {len(reclists_df):,} registros")
     print(f"  - {file_size_kb:.1f} KB")
     
@@ -259,11 +259,11 @@ def save_reclists(
             f.write(f"| {size} | {count:,} |\n")
         
         f.write("\n## Validação\n\n")
-        f.write("- ✓ Todas as listas foram geradas com o algoritmo atribuído ao usuário\n")
-        f.write("- ✓ Estratégias de diversificação aplicadas conforme configurado\n")
-        f.write("- ✓ Rankings preservam ordem de score (exceto quando diversificado)\n\n")
+        f.write("- Todas as listas foram geradas com o algoritmo atribuído ao usuário\n")
+        f.write("- Estratégias de diversificação aplicadas conforme configurado\n")
+        f.write("- Rankings preservam ordem de score (exceto quando diversificado)\n\n")
     
-    print(f"✓ Relatório salvo: {report_path}")
+    print(f"Relatório salvo: {report_path}")
 
 
 def main():
@@ -280,10 +280,10 @@ def main():
     # Preparar vetores
     print("\nPreparando vetores...")
     feature_vectors = prepare_feature_vectors(features_df)
-    print(f"✓ Feature vectors: {len(feature_vectors):,}")
+    print(f"Feature vectors: {len(feature_vectors):,}")
     
     topic_vectors = prepare_topic_vectors(topics_df)
-    print(f"✓ Topic vectors: {len(topic_vectors):,}")
+    print(f"Topic vectors: {len(topic_vectors):,}")
     
     # Gerar listas
     reclists_df, stats = generate_reclists(

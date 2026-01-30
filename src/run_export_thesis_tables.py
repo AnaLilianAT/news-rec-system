@@ -49,16 +49,16 @@ def main():
             missing.append(f"{name}: {path}")
     
     if missing:
-        print("\n❌ ERRO: Arquivos necessários não encontrados:")
+        print("\nERRO: Arquivos necessários não encontrados:")
         for m in missing:
             print(f"  - {m}")
         print("\nExecute as etapas anteriores do pipeline antes de rodar este script.")
         return 1
     
-    print("\n✓ Todos os arquivos necessários foram encontrados")
+    print("\nTodos os arquivos necessários foram encontrados")
     
     # Carregar dados
-    print("\n📂 Carregando dados...")
+    print("\nCarregando dados...")
     eval_pairs = pd.read_parquet(required_files['eval_pairs'])
     reclists = pd.read_parquet(required_files['reclists'])
     features = pd.read_parquet(required_files['features'])
@@ -70,7 +70,7 @@ def main():
     print(f"  - topics: {len(topics)} relações item-tópico")
     
     # Normalizar nomes de algoritmos nos dados
-    print("\n🔄 Normalizando nomes de algoritmos...")
+    print("\nNormalizando nomes de algoritmos...")
     eval_pairs['algorithm'] = eval_pairs['algorithm'].apply(normalize_algorithm_name)
     reclists['algorithm'] = reclists['algorithm'].apply(normalize_algorithm_name)
     
@@ -94,9 +94,9 @@ def main():
     df_gh_interaction = compute_GH_interaction_jaccard(eval_pairs, topics)
     
     if len(df_gh_interaction) == 0:
-        print("❌ AVISO: Nenhum usuário com >= 2 itens para calcular GH (interação)")
+        print("AVISO: Nenhum usuário com >= 2 itens para calcular GH (interação)")
         report_lines.append("## Tabela 6.1: GH (Jaccard - Interação)\n")
-        report_lines.append("⚠️ Nenhum dado disponível\n")
+        report_lines.append("Nenhum dado disponível\n")
     else:
         print(f"  - {len(df_gh_interaction)} usuários com GH calculado")
         
@@ -113,7 +113,7 @@ def main():
         output_path_6_1 = outputs_dir / "tabela_6_1_GH_interacao.csv"
         table_6_1_formatted.to_csv(output_path_6_1, index=False)
         
-        print(f"\n✓ Tabela salva em: {output_path_6_1}")
+        print(f"\nTabela salva em: {output_path_6_1}")
         print("\nPreview:")
         print(table_6_1_formatted.to_string(index=False))
         
@@ -143,9 +143,9 @@ def main():
     df_gh_lists = compute_GH_lists_cosine(reclists, features)
     
     if len(df_gh_lists) == 0:
-        print("❌ AVISO: Nenhuma lista com >= 2 itens para calcular GH (listas)")
+        print("AVISO: Nenhuma lista com >= 2 itens para calcular GH (listas)")
         report_lines.append("## Tabela 6.6: GH (Cosseno - Listas)\n")
-        report_lines.append("⚠️ Nenhum dado disponível\n")
+        report_lines.append("Nenhum dado disponível\n")
     else:
         print(f"  - {len(df_gh_lists)} usuários com GH calculado")
         
@@ -162,7 +162,7 @@ def main():
         output_path_6_6 = outputs_dir / "tabela_6_6_GH_listas.csv"
         table_6_6_formatted.to_csv(output_path_6_6, index=False)
         
-        print(f"\n✓ Tabela salva em: {output_path_6_6}")
+        print(f"\nTabela salva em: {output_path_6_6}")
         print("\nPreview:")
         print(table_6_6_formatted.to_string(index=False))
         
@@ -193,9 +193,9 @@ def main():
     df_rmse = compute_RMSE_user(eval_pairs)
     
     if len(df_rmse) == 0:
-        print("❌ AVISO: Nenhum usuário com >= 2 pares para calcular RMSE")
+        print("AVISO: Nenhum usuário com >= 2 pares para calcular RMSE")
         report_lines.append("## Tabela 6.3: RMSE\n")
-        report_lines.append("⚠️ Nenhum dado disponível\n")
+        report_lines.append("Nenhum dado disponível\n")
     else:
         print(f"  - {len(df_rmse)} usuários com RMSE calculado")
         
@@ -212,7 +212,7 @@ def main():
         output_path_6_3 = outputs_dir / "tabela_6_3_RMSE.csv"
         table_6_3_formatted.to_csv(output_path_6_3, index=False)
         
-        print(f"\n✓ Tabela salva em: {output_path_6_3}")
+        print(f"\nTabela salva em: {output_path_6_3}")
         print("\nPreview:")
         print(table_6_3_formatted.to_string(index=False))
         
@@ -239,10 +239,10 @@ def main():
         f.write('\n'.join(report_lines))
     
     print("\n" + "=" * 80)
-    print(f"✓ Relatório salvo em: {report_path}")
+    print(f"Relatório salvo em: {report_path}")
     print("=" * 80)
     
-    print("\n✅ CONCLUÍDO! As três tabelas foram geradas com sucesso.")
+    print("\nCONCLUÍDO! As três tabelas foram geradas com sucesso.")
     print("\nArquivos gerados:")
     print(f"  1. {output_path_6_1}")
     print(f"  2. {output_path_6_6}")
