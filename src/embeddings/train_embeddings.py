@@ -8,13 +8,35 @@ e salva embeddings com cache + metadados para reuso.
 import argparse
 import json
 import hashlib
+import random
 import pandas as pd
 import numpy as np
+import torch
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 
 from .autoencoder import train_autoencoder, extract_embeddings
 from ..representations.item_representation import get_item_representation
+from ..config import AUTOENCODER_CONFIG
+
+
+def set_seeds(seed: int):
+    """
+    Fixa seeds para reprodutibilidade completa.
+    
+    Args:
+        seed: Seed para random, numpy e torch
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        # Garante determinismo em CUDA (pode impactar performance)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def compute_data_hash(X: np.ndarray) -> str:
@@ -40,7 +62,9 @@ def get_cache_metadata(
     learning_rate: float,
     seed: int,
     data_hash: str,
-    representation_type: str
+    representation_type: str,
+    pos_weight_mode: str = 'auto',
+    denoising_prob: float = 0.0
 ) -> Dict[str, Any]:
     """
     Cria dicionário de metadados para cache.
@@ -57,7 +81,9 @@ def get_cache_metadata(
         'batch_size': batch_size,
         'learning_rate': learning_rate,
         'seed': seed,
-        'data_hash': data_hash
+        'data_hash': data_hash,
+        'pos_weight_mode': pos_weight_mode,
+        'denoising_prob': denoising_prob
     }
 
 
@@ -84,7 +110,8 @@ def check_cache_valid(
         
         # Comparar todos os campos relevantes
         for key in ['embedding_dim', 'hidden_dim', 'dropout_rate', 'epochs',
-                    'batch_size', 'learning_rate', 'seed', 'data_hash']:
+                    'batch_size', 'learning_rate', 'seed', 'data_hash',
+                    'pos_weight_mode', 'denoising_prob']:
             if cached_metadata.get(key) != current_metadata.get(key):
                 return False
         
@@ -173,13 +200,15 @@ def load_embedding_cache(
 
 def train_and_export_embeddings(
     data_dir: str = "outputs",
-    embedding_dim: int = 32,
+    embedding_dim: int = None,
     hidden_dim: Optional[int] = None,
-    dropout_rate: float = 0.1,
-    epochs: int = 100,
-    batch_size: int = 32,
-    learning_rate: float = 0.001,
-    seed: int = 42,
+    dropout_rate: float = None,
+    epochs: int = None,
+    batch_size: int = None,
+    learning_rate: float = None,
+    seed: int = None,
+    pos_weight_mode: str = None,
+    denoising_prob: float = None,
     force_retrain: bool = False,
     verbose: bool = True
 ) -> Tuple[Path, Path]:
@@ -187,22 +216,56 @@ def train_and_export_embeddings(
     Treina autoencoders para features e tópicos, gerando embeddings.
     
     Implementa cache: se embeddings com mesma config já existem, reutiliza.
+    Usa configuração centralizada de config.py quando parâmetros são None.
     
     Args:
         data_dir: Diretório com canonical_features.parquet e canonical_topics.parquet
-        embedding_dim: Dimensão dos embeddings
-        hidden_dim: Dimensão da camada oculta (None = auto)
-        dropout_rate: Taxa de dropout para denoising
-        epochs: Número de épocas
-        batch_size: Tamanho do batch
-        learning_rate: Taxa de aprendizado
-        seed: Seed para reprodutibilidade
+        embedding_dim: Dimensão dos embeddings (None = usar config.py)
+        hidden_dim: Dimensão da camada oculta (None = auto ou config.py)
+        dropout_rate: Taxa de dropout (None = usar config.py)
+        epochs: Número de épocas (None = usar config.py)
+        batch_size: Tamanho do batch (None = usar config.py)
+        learning_rate: Taxa de aprendizado (None = usar config.py)
+        seed: Seed para reprodutibilidade (None = usar config.py)
+        pos_weight_mode: Modo de peso positivo (None = usar config.py)
+        denoising_prob: Probabilidade de denoising (None = usar config.py)
         force_retrain: Se True, ignora cache e retreina
         verbose: Se True, imprime progresso
     
     Returns:
         Tupla com (path_features, path_topics) dos embeddings gerados
     """
+    # Usar configuração centralizada como padrão
+    cfg = AUTOENCODER_CONFIG
+    
+    embedding_dim = embedding_dim if embedding_dim is not None else cfg['embedding_dim']
+    hidden_dim = hidden_dim if hidden_dim is not None else cfg['hidden_dim']
+    dropout_rate = dropout_rate if dropout_rate is not None else cfg['dropout_rate']
+    epochs = epochs if epochs is not None else cfg['epochs']
+    batch_size = batch_size if batch_size is not None else cfg['batch_size']
+    learning_rate = learning_rate if learning_rate is not None else cfg['learning_rate']
+    seed = seed if seed is not None else cfg['seed']
+    pos_weight_mode = pos_weight_mode if pos_weight_mode is not None else cfg['pos_weight_mode']
+    denoising_prob = denoising_prob if denoising_prob is not None else cfg['denoising_prob']
+    
+    # Fixar seeds para reprodutibilidade
+    set_seeds(seed)
+    
+    if verbose:
+        print("\n" + "="*60)
+        print("CONFIGURAÇÃO DO AUTOENCODER")
+        print("="*60)
+        print(f"Embedding dim: {embedding_dim}")
+        print(f"Hidden dim: {hidden_dim if hidden_dim else 'auto'}")
+        print(f"Dropout rate: {dropout_rate}")
+        print(f"Epochs: {epochs}")
+        print(f"Batch size: {batch_size}")
+        print(f"Learning rate: {learning_rate}")
+        print(f"Seed: {seed}")
+        print(f"Pos weight mode: {pos_weight_mode}")
+        print(f"Denoising prob: {denoising_prob}")
+        print(f"Cache: {'Desabilitado (--force)' if force_retrain else 'Habilitado'}")
+    
     data_path = Path(data_dir)
     embeddings_dir = data_path / "embeddings"
     embeddings_dir.mkdir(parents=True, exist_ok=True)
@@ -240,7 +303,9 @@ def train_and_export_embeddings(
         learning_rate=learning_rate,
         seed=seed,
         data_hash=data_hash_features,
-        representation_type='ae_features'
+        representation_type='ae_features',
+        pos_weight_mode=pos_weight_mode,
+        denoising_prob=denoising_prob
     )
     
     # Verificar cache
@@ -312,7 +377,9 @@ def train_and_export_embeddings(
         learning_rate=learning_rate,
         seed=seed,
         data_hash=data_hash_topics,
-        representation_type='ae_topics'
+        representation_type='ae_topics',
+        pos_weight_mode=pos_weight_mode,
+        denoising_prob=denoising_prob
     )
     
     # Verificar cache
@@ -369,6 +436,8 @@ def train_and_export_embeddings(
 
 def main():
     """CLI para treinar autoencoders e gerar embeddings."""
+    cfg = AUTOENCODER_CONFIG
+    
     parser = argparse.ArgumentParser(
         description="Treina autoencoders e gera embeddings de features e tópicos"
     )
@@ -381,44 +450,56 @@ def main():
     parser.add_argument(
         '--embedding-dim',
         type=int,
-        default=32,
-        help='Dimensão dos embeddings (padrão: 32)'
+        default=None,
+        help=f"Dimensão dos embeddings (padrão config: {cfg['embedding_dim']})"
     )
     parser.add_argument(
         '--hidden-dim',
         type=int,
         default=None,
-        help='Dimensão da camada oculta (padrão: média entre input e embedding)'
+        help=f"Dimensão da camada oculta (padrão config: {cfg['hidden_dim']})"
     )
     parser.add_argument(
         '--dropout-rate',
         type=float,
-        default=0.1,
-        help='Taxa de dropout para denoising (padrão: 0.1)'
+        default=None,
+        help=f"Taxa de dropout para denoising (padrão config: {cfg['dropout_rate']})"
     )
     parser.add_argument(
         '--epochs',
         type=int,
-        default=100,
-        help='Número de épocas (padrão: 100)'
+        default=None,
+        help=f"Número de épocas (padrão config: {cfg['epochs']})"
     )
     parser.add_argument(
         '--batch-size',
         type=int,
-        default=32,
-        help='Tamanho do batch (padrão: 32)'
+        default=None,
+        help=f"Tamanho do batch (padrão config: {cfg['batch_size']})"
     )
     parser.add_argument(
         '--learning-rate',
         type=float,
-        default=0.001,
-        help='Taxa de aprendizado (padrão: 0.001)'
+        default=None,
+        help=f"Taxa de aprendizado (padrão config: {cfg['learning_rate']})"
     )
     parser.add_argument(
         '--seed',
         type=int,
-        default=42,
-        help='Seed para reprodutibilidade (padrão: 42)'
+        default=None,
+        help=f"Seed para reprodutibilidade (padrão config: {cfg['seed']})"
+    )
+    parser.add_argument(
+        '--pos-weight-mode',
+        type=str,
+        default=None,
+        help=f"Modo de pos_weight para BCE (padrão config: {cfg['pos_weight_mode']})"
+    )
+    parser.add_argument(
+        '--denoising-prob',
+        type=float,
+        default=None,
+        help=f"Probabilidade de denoising (padrão config: {cfg['denoising_prob']})"
     )
     parser.add_argument(
         '--force',
@@ -437,6 +518,8 @@ def main():
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         seed=args.seed,
+        pos_weight_mode=args.pos_weight_mode,
+        denoising_prob=args.denoising_prob,
         force_retrain=args.force,
         verbose=True
     )

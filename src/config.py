@@ -2,8 +2,47 @@
 Configurações globais do pipeline de replay temporal.
 """
 
+# ============================================================================
+# REPRODUTIBILIDADE
+# ============================================================================
+
 # Seed aleatória para reprodutibilidade
 RANDOM_SEED = 42
+
+# ============================================================================
+# AUTOENCODER (EMBEDDINGS)
+# ============================================================================
+
+# Configurações centralizadas do autoencoder para reprodutibilidade
+AUTOENCODER_CONFIG = {
+    # Arquitetura
+    'embedding_dim': 32,           # Dimensão final do embedding (camada do meio)
+    'hidden_dim': None,            # Dimensão oculta opcional (None = 2x embedding_dim)
+    
+    # Treinamento
+    'epochs': 100,                 # Número de épocas de treinamento
+    'batch_size': 32,              # Tamanho do batch
+    'learning_rate': 0.001,        # Taxa de aprendizado (Adam optimizer)
+    
+    # Regularização
+    'dropout_rate': 0.2,           # Dropout entre camadas (0.0 a 0.5)
+    'denoising_prob': 0.0,         # Probabilidade de corrupção para denoising AE (0.0 = desabilitado)
+    
+    # Tratamento de desbalanceamento
+    'pos_weight_mode': 'auto',     # 'auto', 'sqrt', ou valor float (ex: 2.0)
+    
+    # Reprodutibilidade
+    'seed': RANDOM_SEED,           # Seed para torch, numpy e random
+    
+    # Cache
+    'use_cache': True,             # Habilitar cache de embeddings
+    'invalidate_on_data_change': True,  # Invalidar cache se dados mudarem
+    'invalidate_on_config_change': True  # Invalidar cache se config mudar
+}
+
+# ============================================================================
+# PIPELINE
+# ============================================================================
 
 # Tamanho mínimo de candidate pool para processar checkpoint
 MIN_CANDIDATE_SIZE = 20
@@ -14,7 +53,10 @@ BATCH_SIZE = 100
 # Cache de modelos por t_rec (para evitar retreinar se possível)
 CACHE_BY_TREC = True
 
-# Hiperparâmetros dos modelos Surprise
+# ============================================================================
+# HIPERPARÂMETROS DOS MODELOS SURPRISE
+# ============================================================================
+
 SURPRISE_PARAMS = {
     'knnu': {  # User-based KNN
         'k': 5,
@@ -42,6 +84,10 @@ SURPRISE_PARAMS = {
         'random_state': RANDOM_SEED
     }
 }
+
+# ============================================================================
+# MAPEAMENTO DE ALGORITMOS
+# ============================================================================
 
 # Mapeamento de algoritmos no formato do arquivo users.csv
 ALGORITHM_MAPPING = {
