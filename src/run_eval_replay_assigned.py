@@ -429,43 +429,10 @@ def save_metrics(
     # Determinar sufixo para arquivos
     suffix = f"_{representation_suffix}" if representation_suffix else ""
     
-    # Salvar eval_pairs
+    # Salvar eval_pairs (necessário para run_export_thesis_tables.py)
     eval_pairs_path = output_dir / f'eval_pairs_assigned{suffix}.parquet'
     eval_pairs_df.to_parquet(eval_pairs_path, index=False)
     print(f"Eval pairs: {eval_pairs_path} ({len(eval_pairs_df):,} registros)")
-    
-    # Salvar RMSE
-    rmse_path = output_dir / f'metrics_rmse_by_algorithm_assigned{suffix}.csv'
-    rmse_by_algorithm.to_csv(rmse_path, index=False)
-    print(f"RMSE por algorithm: {rmse_path}")
-    
-    # Salvar GH cosine
-    gh_cosine_path = output_dir / f'metrics_gh_cosine_by_algorithm_assigned{suffix}.csv'
-    gh_cosine_by_algo.to_csv(gh_cosine_path, index=False)
-    print(f"GH cosine por algorithm: {gh_cosine_path}")
-    
-    # Salvar GH Jaccard
-    gh_jaccard_path = output_dir / f'metrics_gh_jaccard_by_algorithm_assigned{suffix}.csv'
-    gh_jaccard_by_algo.to_csv(gh_jaccard_path, index=False)
-    print(f"GH Jaccard por algorithm: {gh_jaccard_path}")
-    
-    # Salvar métricas por usuário
-    user_metrics_path = output_dir / f'user_level_metrics_assigned{suffix}.parquet'
-    user_metrics.to_parquet(user_metrics_path, index=False)
-    print(f"Métricas por usuário: {user_metrics_path} ({len(user_metrics):,} registros)")
-    
-    # Gerar relatório
-    generate_report(
-        eval_pairs_df,
-        rmse_by_algorithm,
-        gh_cosine_by_algo,
-        gh_jaccard_by_algo,
-        user_metrics,
-        total_test_interactions,
-        total_exposed,
-        output_dir,
-        representation_suffix
-    )
 
 
 def generate_report(

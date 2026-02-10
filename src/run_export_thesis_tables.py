@@ -249,21 +249,21 @@ def process_representation(
         report_lines.append(f"\n**Usuários excluídos**: {excluded_rmse} (< 2 pares de avaliação)\n")
     
     # ========================================================================
-    # Salvar relatório
+    # DESABILITADO: Relatório não é mais gerado
     # ========================================================================
-    report_path = reports_dir / f"thesis_format_report{suffix}.md"
-    with open(report_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(report_lines))
-    
-    print("\n" + "=" * 80)
-    print(f"Relatório salvo em: {report_path}")
-    print("=" * 80)
+    # report_path = reports_dir / f"thesis_format_report{suffix}.md"
+    # with open(report_path, 'w', encoding='utf-8') as f:
+    #     f.write('\n'.join(report_lines))
+    # 
+    # print("\n" + "=" * 80)
+    # print(f"Relatório salvo em: {report_path}")
+    # print("=" * 80)
     
     print(f"\nTabelas geradas para {label}:")
     print(f"  1. {output_path_6_1}")
     print(f"  2. {output_path_6_6}")
     print(f"  3. {output_path_6_3}")
-    print(f"  4. {report_path}")
+    # print(f"  4. {report_path}")
     
     return 0
 

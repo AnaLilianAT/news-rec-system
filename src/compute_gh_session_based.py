@@ -160,10 +160,10 @@ def process_representation(outputs_dir: Path = None, representation_suffix: str 
     df_sessions = pd.DataFrame(session_results)
     print(f"  {len(df_sessions)} sessões válidas (|R_session| >= 2)")
     
-    # Exportar dados de sessão
-    session_path = debug_dir / f"gh_sessions_level{suffix}.csv"
-    df_sessions.to_csv(session_path, index=False)
-    print(f"  Dados salvos: {session_path}")
+    # DESABILITADO: CSV de debug não é mais gerado
+    # session_path = debug_dir / f"gh_sessions_level{suffix}.csv"
+    # df_sessions.to_csv(session_path, index=False)
+    # print(f"  Dados salvos: {session_path}")
     
     # ETAPA 2: Agregar por usuário (média de sessões)
     print("\nETAPA 2: Agregando por usuário (GH_user = média de GH_session)...")
@@ -188,10 +188,10 @@ def process_representation(outputs_dir: Path = None, representation_suffix: str 
     df_users = pd.DataFrame(user_results)
     print(f"  {len(df_users)} usuários processados")
     
-    # Exportar dados de usuário
-    user_path = debug_dir / f"gh_user_session_based{suffix}.csv"
-    df_users.to_csv(user_path, index=False)
-    print(f"  Dados salvos: {user_path}")
+    # DESABILITADO: CSV de debug não é mais gerado
+    # user_path = debug_dir / f"gh_user_session_based{suffix}.csv"
+    # df_users.to_csv(user_path, index=False)
+    # print(f"  Dados salvos: {user_path}")
     
     # ETAPA 3: Agregar por algoritmo (Tabela 6.1)
     print("\nETAPA 3: Agregando por algoritmo (Tabela 6.1)...")
@@ -282,103 +282,104 @@ def process_representation(outputs_dir: Path = None, representation_suffix: str 
         print("=" * 80)
         print(df_comp_stats.to_string(index=False))
         
-        # Exportar comparação
-        comp_path = debug_dir / f"gh_session_vs_global_comparison{suffix}.csv"
-        df_comp_stats.to_csv(comp_path, index=False)
-        print(f"\nComparação salva: {comp_path}")
+        # DESABILITADO: CSV de comparação não é mais gerado
+        # comp_path = debug_dir / f"gh_session_vs_global_comparison{suffix}.csv"
+        # df_comp_stats.to_csv(comp_path, index=False)
+        # print(f"\nComparação salva: {comp_path}")
     
-    # Gerar relatório
-    print("\nGerando relatório...")
-    report_lines = []
-    
-    report_lines.append("# Tabela 6.1 - GH por Sessão (Abordagem da Tese)\n")
-    report_lines.append("## Metodologia\n")
-    report_lines.append("1. **GH por sessão**: Para cada (user_id, t_rec):")
-    report_lines.append("   - R_session = itens expostos e avaliados naquela sessão")
-    report_lines.append("   - GH_session = (1/|R_session|) × Σ_{i<j} Jaccard(i,j)")
-    report_lines.append("   - Exigir |R_session| >= 2\n")
-    report_lines.append("2. **GH por usuário**: GH_user = média(GH_session)")
-    report_lines.append("   - Exigir pelo menos 1 sessão válida\n")
-    report_lines.append("3. **GH por algoritmo**: Agregação por usuário (média, mediana, DP, p-valor)\n")
-    
-    report_lines.append("## Dados Processados\n")
-    report_lines.append(f"- **Sessões válidas**: {len(df_sessions)}")
-    report_lines.append(f"- **Usuários válidos**: {len(df_users)}")
-    report_lines.append(f"- **Algoritmos**: {df_users['algorithm'].nunique()}\n")
-    
-    report_lines.append("## Distribuição de Sessões por Usuário\n")
-    report_lines.append("| Algoritmo | N usuários | Sessões Médias | Sessões Mediana | Sessões Max |")
-    report_lines.append("|-----------|-----------|---------------|----------------|-------------|")
-    for algo in algo_order:
-        subset = df_users[df_users['algorithm'] == algo]['n_sessions_valid']
-        if len(subset) > 0:
-            report_lines.append(
-                f"| {algo:9s} | {len(subset):10d} | {subset.mean():14.1f} | "
-                f"{subset.median():15.1f} | {subset.max():11d} |"
-            )
-    report_lines.append("\n")
-    
-    report_lines.append("## Tabela 6.1 - GH por Interação (Baseado em Sessões)\n")
-    report_lines.append("```")
-    report_lines.append(df_table61.to_string(index=False))
-    report_lines.append("```\n")
-    
-    # Análise comparativa
-    if audit_path.exists():
-        report_lines.append("## Comparação: Sessão vs. Global\n")
-        report_lines.append("| Algoritmo | GH Sessão (Média±DP) | GH Global (Média±DP) | Redução DP |")
-        report_lines.append("|-----------|---------------------|---------------------|------------|")
-        for _, row in df_comp_stats.iterrows():
-            report_lines.append(
-                f"| {row['algorithm']:9s} | {row['gh_session_mean']:.3f}±{row['gh_session_std']:.3f} | "
-                f"{row['gh_global_mean']:.3f}±{row['gh_global_std']:.3f} | "
-                f"{row['std_reduction']*100:7.1f}% |"
-            )
-        report_lines.append("\n")
-        
-        # Diagnóstico
-        report_lines.append("### Diagnóstico\n")
-        
-        avg_std_reduction = df_comp_stats['std_reduction'].mean()
-        
-        if avg_std_reduction > 0.5:
-            report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
-            report_lines.append("A abordagem por sessão reduziu drasticamente a variância,")
-            report_lines.append("confirmando que a acumulação de itens de múltiplas sessões")
-            report_lines.append("estava distorcendo a métrica.\n")
-        else:
-            report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
-            report_lines.append("A redução de variância foi menor que o esperado.\n")
-        
-        # Checar valores GH
-        gh_session_mean = df_comp_stats['gh_session_mean'].mean()
-        gh_global_mean = df_comp_stats['gh_global_mean'].mean()
-        
-        report_lines.append(f"**Média global GH (sessão)**: {gh_session_mean:.3f}")
-        report_lines.append(f"**Média global GH (global)**: {gh_global_mean:.3f}")
-        report_lines.append(f"**Intervalo da tese**: [0.72, 0.76]\n")
-        
-        if 0.65 <= gh_session_mean <= 0.85:
-            report_lines.append("**Escala aproximada da tese alcançada!**\n")
-        elif gh_session_mean > 1.0:
-            report_lines.append("**Valores ainda acima de 1.0 - revisar normalização**\n")
-    
-    # Salvar relatório
-    report_path = reports_dir / f"table61_session_based_report{suffix}.md"
-    report_path.write_text("\n".join(report_lines), encoding='utf-8')
-    
-    print(f"\nRelatório salvo: {report_path}")
+    # DESABILITADO: Relatório não é mais gerado
+    # print("\nGerando relatório...")
+    # report_lines = []
+    # 
+    # report_lines.append("# Tabela 6.1 - GH por Sessão (Abordagem da Tese)\n")
+    # report_lines.append("## Metodologia\n")
+    # report_lines.append("1. **GH por sessão**: Para cada (user_id, t_rec):")
+    # report_lines.append("   - R_session = itens expostos e avaliados naquela sessão")
+    # report_lines.append("   - GH_session = (1/|R_session|) × Σ_{i<j} Jaccard(i,j)")
+    # report_lines.append("   - Exigir |R_session| >= 2\n")
+    # report_lines.append("2. **GH por usuário**: GH_user = média(GH_session)")
+    # report_lines.append("   - Exigir pelo menos 1 sessão válida\n")
+    # report_lines.append("3. **GH por algoritmo**: Agregação por usuário (média, mediana, DP, p-valor)\n")
+    # 
+    # report_lines.append("## Dados Processados\n")
+    # report_lines.append(f"- **Sessões válidas**: {len(df_sessions)}")
+    # report_lines.append(f"- **Usuários válidos**: {len(df_users)}")
+    # report_lines.append(f"- **Algoritmos**: {df_users['algorithm'].nunique()}\n")
+    # 
+    # report_lines.append("## Distribuição de Sessões por Usuário\n")
+    # report_lines.append("| Algoritmo | N usuários | Sessões Médias | Sessões Mediana | Sessões Max |")
+    # report_lines.append("|-----------|-----------|---------------|----------------|-------------|")
+    # for algo in algo_order:
+    #     subset = df_users[df_users['algorithm'] == algo]['n_sessions_valid']
+    #     if len(subset) > 0:
+    #         report_lines.append(
+    #             f"| {algo:9s} | {len(subset):10d} | {subset.mean():14.1f} | "
+    #             f"{subset.median():15.1f} | {subset.max():11d} |"
+    #         )
+    # report_lines.append("\n")
+    # 
+    # report_lines.append("## Tabela 6.1 - GH por Interação (Baseado em Sessões)\n")
+    # report_lines.append("```")
+    # report_lines.append(df_table61.to_string(index=False))
+    # report_lines.append("```\n")
+    # 
+    # # Análise comparativa
+    # if audit_path.exists():
+    #     report_lines.append("## Comparação: Sessão vs. Global\n")
+    #     report_lines.append("| Algoritmo | GH Sessão (Média±DP) | GH Global (Média±DP) | Redução DP |")
+    #     report_lines.append("|-----------|---------------------|---------------------|------------|")
+    #     for _, row in df_comp_stats.iterrows():
+    #         report_lines.append(
+    #             f"| {row['algorithm']:9s} | {row['gh_session_mean']:.3f}±{row['gh_session_std']:.3f} | "
+    #             f"{row['gh_global_mean']:.3f}±{row['gh_global_std']:.3f} | "
+    #             f"{row['std_reduction']*100:7.1f}% |"
+    #         )
+    #     report_lines.append("\n")
+    #     
+    #     # Diagnóstico
+    #     report_lines.append("### Diagnóstico\n")
+    #     
+    #     avg_std_reduction = df_comp_stats['std_reduction'].mean()
+    #     
+    #     if avg_std_reduction > 0.5:
+    #         report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
+    #         report_lines.append("A abordagem por sessão reduziu drasticamente a variância,")
+    #         report_lines.append("confirmando que a acumulação de itens de múltiplas sessões")
+    #         report_lines.append("estava distorcendo a métrica.\n")
+    #     else:
+    #         report_lines.append(f"**Redução média de DP: {avg_std_reduction*100:.1f}%**\n")
+    #         report_lines.append("A redução de variância foi menor que o esperado.\n")
+    #     
+    #     # Checar valores GH
+    #     gh_session_mean = df_comp_stats['gh_session_mean'].mean()
+    #     gh_global_mean = df_comp_stats['gh_global_mean'].mean()
+    #     
+    #     report_lines.append(f"**Média global GH (sessão)**: {gh_session_mean:.3f}")
+    #     report_lines.append(f"**Média global GH (global)**: {gh_global_mean:.3f}")
+    #     report_lines.append(f"**Intervalo da tese**: [0.72, 0.76]\n")
+    #     
+    #     if 0.65 <= gh_session_mean <= 0.85:
+    #         report_lines.append("**Escala aproximada da tese alcançada!**\n")
+    #     elif gh_session_mean > 1.0:
+    #         report_lines.append("**Valores ainda acima de 1.0 - revisar normalização**\n")
+    # 
+    # # Salvar relatório
+    # report_path = reports_dir / f"table61_session_based_report{suffix}.md"
+    # report_path.write_text("\n".join(report_lines), encoding='utf-8')
+    # 
+    # print(f"\nRelatório salvo: {report_path}")
     
     print("\n" + "=" * 80)
     print("PROCESSO CONCLUÍDO")
     print("=" * 80)
-    print("\nArquivos gerados para {label}:")
-    print(f"  1. {session_path} (sessões individuais)")
-    print(f"  2. {user_path} (usuários agregados)")
-    print(f"  3. {table61_path} (Tabela 6.1 final)")
-    if audit_path.exists():
-        print(f"  4. {comp_path} (comparação sessão vs global)")
-    print(f"  5. {report_path} (relatório completo)")
+    print(f"\nArquivo gerado para {label}:")
+    print(f"  1. {table61_path} (Tabela 6.1 final)")
+    # print(f"  1. {session_path} (sessões individuais)")
+    # print(f"  2. {user_path} (usuários agregados)")
+    # print(f"  3. {table61_path} (Tabela 6.1 final)")
+    # if audit_path.exists():
+    #     print(f"  4. {comp_path} (comparação sessão vs global)")
+    # print(f"  5. {report_path} (relatório completo)")
     
     return True
 

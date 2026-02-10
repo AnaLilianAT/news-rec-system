@@ -236,67 +236,67 @@ def save_reclists(
     print(f"  - {len(reclists_df):,} registros")
     print(f"  - {file_size_kb:.1f} KB")
     
-    # Gerar relatório
-    report_dir = output_dir / 'reports'
-    report_dir.mkdir(exist_ok=True)
-    
-    if representation_suffix:
-        report_path = report_dir / f'reclists_report_assigned_{representation_suffix}.md'
-    else:
-        report_path = report_dir / 'reclists_report_assigned.md'
-    
-    with open(report_path, 'w', encoding='utf-8') as f:
-        f.write("# Relatório de Geração de Listas Top-20 (ALL-BETWEEN)\n\n")
-        f.write(f"**Data de geração**: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        
-        f.write("## Resumo Geral\n\n")
-        f.write(f"- **Total de listas geradas**: {stats['total_lists']:,}\n")
-        f.write(f"- **Listas completas (20 itens)**: {stats['complete_lists']:,} "
-                f"({100*stats['complete_lists']/stats['total_lists']:.1f}%)\n")
-        f.write(f"- **Listas incompletas (<20)**: {stats['incomplete_lists']:,} "
-                f"({100*stats['incomplete_lists']/stats['total_lists']:.1f}%)\n\n")
-        
-        f.write("## Distribuição por Estratégia de Diversificação\n\n")
-        f.write("| Estratégia | Listas | Percentual |\n")
-        f.write("|------------|--------|------------|\n")
-        for diversify, count in sorted(stats['by_diversify'].items()):
-            pct = 100 * count / stats['total_lists']
-            f.write(f"| {diversify} | {count:,} | {pct:.1f}% |\n")
-        
-        f.write("\n## Distribuição por Algoritmo Base\n\n")
-        f.write("| Algoritmo | Listas | Percentual |\n")
-        f.write("|-----------|--------|------------|\n")
-        for algo, count in sorted(stats['by_base_algo'].items()):
-            pct = 100 * count / stats['total_lists']
-            f.write(f"| {algo} | {count:,} | {pct:.1f}% |\n")
-        
-        f.write("\n## Estatísticas dos Registros\n\n")
-        f.write(f"- **Total de itens recomendados**: {len(reclists_df):,}\n")
-        f.write(f"- **Usuários únicos**: {reclists_df['user_id'].nunique():,}\n")
-        f.write(f"- **Notícias únicas**: {reclists_df['news_id'].nunique():,}\n")
-        f.write(f"- **Score médio**: {reclists_df['score_pred'].mean():.4f}\n")
-        f.write(f"- **Score mínimo**: {reclists_df['score_pred'].min():.4f}\n")
-        f.write(f"- **Score máximo**: {reclists_df['score_pred'].max():.4f}\n\n")
-        
-        f.write("## Distribuição de Tamanho das Listas\n\n")
-        list_sizes = reclists_df.groupby(['user_id', 't_rec']).size()
-        f.write(f"- **Tamanho médio**: {list_sizes.mean():.1f} itens\n")
-        f.write(f"- **Tamanho mínimo**: {list_sizes.min()} itens\n")
-        f.write(f"- **Tamanho máximo**: {list_sizes.max()} itens\n\n")
-        
-        size_dist = list_sizes.value_counts().sort_index()
-        f.write("### Distribuição detalhada:\n\n")
-        f.write("| Tamanho | Quantidade |\n")
-        f.write("|---------|------------|\n")
-        for size, count in size_dist.items():
-            f.write(f"| {size} | {count:,} |\n")
-        
-        f.write("\n## Validação\n\n")
-        f.write("- Todas as listas foram geradas com o algoritmo atribuído ao usuário\n")
-        f.write("- Estratégias de diversificação aplicadas conforme configurado\n")
-        f.write("- Rankings preservam ordem de score (exceto quando diversificado)\n\n")
-    
-    print(f"Relatório salvo: {report_path}")
+    # DESABILITADO: Relatório não é mais gerado
+    # report_dir = output_dir / 'reports'
+    # report_dir.mkdir(exist_ok=True)
+    # 
+    # if representation_suffix:
+    #     report_path = report_dir / f'reclists_report_assigned_{representation_suffix}.md'
+    # else:
+    #     report_path = report_dir / 'reclists_report_assigned.md'
+    # 
+    # # with open(report_path, 'w', encoding='utf-8') as f:
+    #     f.write("# Relatório de Geração de Listas Top-20 (ALL-BETWEEN)\n\n")
+    #     f.write(f"**Data de geração**: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+    #     
+    #     f.write("## Resumo Geral\n\n")
+    #     f.write(f"- **Total de listas geradas**: {stats['total_lists']:,}\n")
+    #     f.write(f"- **Listas completas (20 itens)**: {stats['complete_lists']:,} "
+    #             f"({100*stats['complete_lists']/stats['total_lists']:.1f}%)\n")
+    #     f.write(f"- **Listas incompletas (<20)**: {stats['incomplete_lists']:,} "
+    #             f"({100*stats['incomplete_lists']/stats['total_lists']:.1f}%)\n\n")
+    #     
+    #     f.write("## Distribuição por Estratégia de Diversificação\n\n")
+    #     f.write("| Estratégia | Listas | Percentual |\n")
+    #     f.write("|------------|--------|------------|\n")
+    #     for diversify, count in sorted(stats['by_diversify'].items()):
+    #         pct = 100 * count / stats['total_lists']
+    #         f.write(f"| {diversify} | {count:,} | {pct:.1f}% |\n")
+    #     
+    #     f.write("\n## Distribuição por Algoritmo Base\n\n")
+    #     f.write("| Algoritmo | Listas | Percentual |\n")
+    #     f.write("|-----------|--------|------------|\n")
+    #     for algo, count in sorted(stats['by_base_algo'].items()):
+    #         pct = 100 * count / stats['total_lists']
+    #         f.write(f"| {algo} | {count:,} | {pct:.1f}% |\n")
+    #     
+    #     f.write("\n## Estatísticas dos Registros\n\n")
+    #     f.write(f"- **Total de itens recomendados**: {len(reclists_df):,}\n")
+    #     f.write(f"- **Usuários únicos**: {reclists_df['user_id'].nunique():,}\n")
+    #     f.write(f"- **Notícias únicas**: {reclists_df['news_id'].nunique():,}\n")
+    #     f.write(f"- **Score médio**: {reclists_df['score_pred'].mean():.4f}\n")
+    #     f.write(f"- **Score mínimo**: {reclists_df['score_pred'].min():.4f}\n")
+    #     f.write(f"- **Score máximo**: {reclists_df['score_pred'].max():.4f}\n\n")
+    #     
+    #     f.write("## Distribuição de Tamanho das Listas\n\n")
+    #     list_sizes = reclists_df.groupby(['user_id', 't_rec']).size()
+    #     f.write(f"- **Tamanho médio**: {list_sizes.mean():.1f} itens\n")
+    #     f.write(f"- **Tamanho mínimo**: {list_sizes.min()} itens\n")
+    #     f.write(f"- **Tamanho máximo**: {list_sizes.max()} itens\n\n")
+    #     
+    #     size_dist = list_sizes.value_counts().sort_index()
+    #     f.write("### Distribuição detalhada:\n\n")
+    #     f.write("| Tamanho | Quantidade |\n")
+    #     f.write("|---------|------------|\n")
+    #     for size, count in size_dist.items():
+    #         f.write(f"| {size} | {count:,} |\n")
+    #     
+    #     f.write("\n## Validação\n\n")
+    #     f.write("- Todas as listas foram geradas com o algoritmo atribuído ao usuário\n")
+    #     f.write("- Estratégias de diversificação aplicadas conforme configurado\n")
+    #     f.write("- Rankings preservam ordem de score (exceto quando diversificado)\n\n")
+    # 
+    # print(f"Relatório salvo: {report_path}")
 
 
 def main():
