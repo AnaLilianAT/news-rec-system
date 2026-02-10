@@ -17,9 +17,16 @@ warnings.filterwarnings('ignore')
 from .similarity import cosine_similarity
 
 
-def load_eval_data(output_dir: Path = Path('outputs')):
+def load_eval_data(
+    output_dir: Path = Path('outputs'),
+    representation_suffix: str = None
+):
     """
     Carrega dados necessários para avaliação.
+    
+    Args:
+        output_dir: Diretório com outputs do pipeline
+        representation_suffix: Sufixo da representação (ex: 'ae_features+ae_topics')
     
     Returns:
         Tupla (interactions_df, checkpoints_df, reclists_df, features_df, topics_df)
@@ -39,8 +46,11 @@ def load_eval_data(output_dir: Path = Path('outputs')):
     checkpoints_df['t_next_rec'] = pd.to_datetime(checkpoints_df['t_next_rec'], utc=True)
     print(f"Checkpoints: {len(checkpoints_df):,}")
     
-    # Listas top-20
-    reclists_path = output_dir / 'reclists_top20_assigned.parquet'
+    # Listas top-20 (com sufixo se aplicável)
+    if representation_suffix:
+        reclists_path = output_dir / f'reclists_top20_assigned_{representation_suffix}.parquet'
+    else:
+        reclists_path = output_dir / 'reclists_top20_assigned.parquet'
     reclists_df = pd.read_parquet(reclists_path)
     reclists_df['t_rec'] = pd.to_datetime(reclists_df['t_rec'], utc=True)
     print(f"Listas top-20: {len(reclists_df):,}")
@@ -397,7 +407,8 @@ def save_metrics(
     user_metrics: pd.DataFrame,
     total_test_interactions: int,
     total_exposed: int,
-    output_dir: Path = Path('outputs')
+    output_dir: Path = Path('outputs'),
+    representation_suffix: str = None
 ):
     """
     Salva todos os outputs de métricas.
@@ -411,31 +422,35 @@ def save_metrics(
         total_test_interactions: Total de interações no teste
         total_exposed: Total de interações expostas
         output_dir: Diretório de saída
+        representation_suffix: Sufixo da representação (ex: 'ae_features+ae_topics')
     """
     print("\nSalvando métricas...")
     
+    # Determinar sufixo para arquivos
+    suffix = f"_{representation_suffix}" if representation_suffix else ""
+    
     # Salvar eval_pairs
-    eval_pairs_path = output_dir / 'eval_pairs_assigned.parquet'
+    eval_pairs_path = output_dir / f'eval_pairs_assigned{suffix}.parquet'
     eval_pairs_df.to_parquet(eval_pairs_path, index=False)
     print(f"Eval pairs: {eval_pairs_path} ({len(eval_pairs_df):,} registros)")
     
     # Salvar RMSE
-    rmse_path = output_dir / 'metrics_rmse_by_algorithm_assigned.csv'
+    rmse_path = output_dir / f'metrics_rmse_by_algorithm_assigned{suffix}.csv'
     rmse_by_algorithm.to_csv(rmse_path, index=False)
     print(f"RMSE por algorithm: {rmse_path}")
     
     # Salvar GH cosine
-    gh_cosine_path = output_dir / 'metrics_gh_cosine_by_algorithm_assigned.csv'
+    gh_cosine_path = output_dir / f'metrics_gh_cosine_by_algorithm_assigned{suffix}.csv'
     gh_cosine_by_algo.to_csv(gh_cosine_path, index=False)
     print(f"GH cosine por algorithm: {gh_cosine_path}")
     
     # Salvar GH Jaccard
-    gh_jaccard_path = output_dir / 'metrics_gh_jaccard_by_algorithm_assigned.csv'
+    gh_jaccard_path = output_dir / f'metrics_gh_jaccard_by_algorithm_assigned{suffix}.csv'
     gh_jaccard_by_algo.to_csv(gh_jaccard_path, index=False)
     print(f"GH Jaccard por algorithm: {gh_jaccard_path}")
     
     # Salvar métricas por usuário
-    user_metrics_path = output_dir / 'user_level_metrics_assigned.parquet'
+    user_metrics_path = output_dir / f'user_level_metrics_assigned{suffix}.parquet'
     user_metrics.to_parquet(user_metrics_path, index=False)
     print(f"Métricas por usuário: {user_metrics_path} ({len(user_metrics):,} registros)")
     
@@ -448,7 +463,8 @@ def save_metrics(
         user_metrics,
         total_test_interactions,
         total_exposed,
-        output_dir
+        output_dir,
+        representation_suffix
     )
 
 
@@ -460,14 +476,17 @@ def generate_report(
     user_metrics: pd.DataFrame,
     total_test_interactions: int,
     total_exposed: int,
-    output_dir: Path
+    output_dir: Path,
+    representation_suffix: str = None
 ):
     """
     Gera relatório markdown com resultados da avaliação.
     """
     report_dir = output_dir / 'reports'
     report_dir.mkdir(exist_ok=True)
-    report_path = report_dir / 'eval_report_assigned.md'
+    
+    suffix = f"_{representation_suffix}" if representation_suffix else ""
+    report_path = report_dir / f'eval_report_assigned{suffix}.md'
     
     exposure_rate = 100 * total_exposed / total_test_interactions if total_test_interactions > 0 else 0
     
@@ -548,56 +567,115 @@ def main():
     """
     Função principal: avalia métricas no replay temporal.
     """
+    import argparse
+    import glob
+    
+    parser = argparse.ArgumentParser(
+        description='Avalia métricas no replay temporal usando algoritmos atribuídos'
+    )
+    parser.add_argument(
+        '--representations',
+        type=str,
+        nargs='+',
+        help='Sufixos de representações a processar (ex: bin_features+bin_topics ae_features+ae_topics)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='outputs',
+        help='Diretório de saída (default: outputs)'
+    )
+    
+    args = parser.parse_args()
+    
     print("=" * 70)
     print("  AVALIAÇÃO - REPLAY TEMPORAL (ALL-BETWEEN)")
     print("=" * 70)
     
-    # Carregar dados
-    interactions_df, checkpoints_df, reclists_df, features_df, topics_df = load_eval_data()
+    # Determinar quais representações processar
+    output_path = Path(args.output_dir)
     
-    # Construir eval_pairs
-    eval_pairs_df, total_test_interactions, total_exposed = build_eval_pairs(
-        interactions_df, checkpoints_df, reclists_df
-    )
+    if args.representations:
+        # Processar representações especificadas
+        suffixes_to_process = args.representations
+    else:
+        # Auto-detectar arquivos reclists disponíveis
+        reclists_files = list(output_path.glob('reclists_top20_assigned*.parquet'))
+        suffixes_to_process = []
+        
+        for file in reclists_files:
+            filename = file.stem  # reclists_top20_assigned ou reclists_top20_assigned_XXX
+            if filename == 'reclists_top20_assigned':
+                suffixes_to_process.append(None)  # Default
+            else:
+                # Extrair sufixo
+                suffix = filename.replace('reclists_top20_assigned_', '')
+                suffixes_to_process.append(suffix)
+        
+        if not suffixes_to_process:
+            print("ERRO: Nenhum arquivo reclists_top20_assigned*.parquet encontrado")
+            return
     
-    if len(eval_pairs_df) == 0:
-        print("\nNenhum eval_pair encontrado. Não há interações expostas para avaliar.")
-        return
+    if len(suffixes_to_process) > 1:
+        print(f"\n⚙ Processando {len(suffixes_to_process)} representações")
     
-    # Calcular RMSE
-    rmse_by_algorithm, rmse_by_user = calculate_rmse_metrics(eval_pairs_df)
-    
-    # Preparar vetores para GH
-    print("\nPreparando vetores para GH...")
-    feature_vectors = prepare_feature_vectors(features_df)
-    print(f"Feature vectors: {len(feature_vectors):,}")
-    
-    topic_vectors = prepare_topic_vectors(topics_df)
-    print(f"Topic vectors: {len(topic_vectors):,}")
-    
-    # Calcular GH
-    gh_cosine_by_algo, gh_jaccard_by_algo, gh_df = calculate_gh_metrics(
-        reclists_df, feature_vectors, topic_vectors
-    )
-    
-    # Agregar métricas por usuário
-    user_metrics = aggregate_user_metrics(rmse_by_user, gh_df)
-    
-    # Salvar tudo
-    save_metrics(
-        eval_pairs_df,
-        rmse_by_algorithm,
-        gh_cosine_by_algo,
-        gh_jaccard_by_algo,
-        user_metrics,
-        total_test_interactions,
-        total_exposed
-    )
+    # Processar cada representação
+    for idx, suffix in enumerate(suffixes_to_process, 1):
+        if len(suffixes_to_process) > 1:
+            print(f"\n{'='*70}")
+            print(f"  PROCESSANDO [{idx}/{len(suffixes_to_process)}]: {suffix or 'default'}")
+            print(f"{'='*70}")
+        
+        # Carregar dados
+        interactions_df, checkpoints_df, reclists_df, features_df, topics_df = load_eval_data(
+            output_dir=output_path,
+            representation_suffix=suffix
+        )
+        
+        # Construir eval_pairs
+        eval_pairs_df, total_test_interactions, total_exposed = build_eval_pairs(
+            interactions_df, checkpoints_df, reclists_df
+        )
+        
+        if len(eval_pairs_df) == 0:
+            print("\nNenhum eval_pair encontrado. Não há interações expostas para avaliar.")
+            continue
+        
+        # Calcular RMSE
+        rmse_by_algorithm, rmse_by_user = calculate_rmse_metrics(eval_pairs_df)
+        
+        # Preparar vetores para GH
+        print("\nPreparando vetores para GH...")
+        feature_vectors = prepare_feature_vectors(features_df)
+        print(f"Feature vectors: {len(feature_vectors):,}")
+        
+        topic_vectors = prepare_topic_vectors(topics_df)
+        print(f"Topic vectors: {len(topic_vectors):,}")
+        
+        # Calcular GH
+        gh_cosine_by_algo, gh_jaccard_by_algo, gh_df = calculate_gh_metrics(
+            reclists_df, feature_vectors, topic_vectors
+        )
+        
+        # Agregar métricas por usuário
+        user_metrics = aggregate_user_metrics(rmse_by_user, gh_df)
+        
+        # Salvar tudo
+        save_metrics(
+            eval_pairs_df,
+            rmse_by_algorithm,
+            gh_cosine_by_algo,
+            gh_jaccard_by_algo,
+            user_metrics,
+            total_test_interactions,
+            total_exposed,
+            output_dir=output_path,
+            representation_suffix=suffix
+        )
     
     print("\n" + "=" * 70)
     print("  AVALIAÇÃO CONCLUÍDA COM SUCESSO!")
     print("=" * 70)
-
 
 if __name__ == '__main__':
     main()

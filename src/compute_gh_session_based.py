@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from format_like_thesis import normalize_algorithm_name
+from src.format_like_thesis import normalize_algorithm_name
 
 
 def compute_jaccard(topics_a: set, topics_b: set) -> float:
@@ -77,13 +77,25 @@ def shapiro_p(values) -> float:
         return np.nan
 
 
-def main():
+def process_representation(outputs_dir: Path = None, representation_suffix: str = None, representation_label: str = None):
+    """Processa uma representação específica.
+    
+    Args:
+        outputs_dir: Diretório de outputs (padrão: 'outputs')
+        representation_suffix: Sufixo para os arquivos (ex: '_ae_features+ae_topics' ou None para default)
+        representation_label: Label para exibição (ex: 'ae_features+ae_topics' ou 'default')
+    """
+    if outputs_dir is None:
+        outputs_dir = Path("outputs")
+    
+    suffix = representation_suffix if representation_suffix else ""
+    label = representation_label if representation_label else "default (bin_features+bin_topics)"
+    
     print("=" * 80)
-    print("CÁLCULO DE GH POR SESSÃO (Abordagem da Tese)")
+    print(f"PROCESSANDO: {label}")
     print("=" * 80)
     
     # Diretórios
-    outputs_dir = Path("outputs")
     debug_dir = outputs_dir / "debug"
     reports_dir = outputs_dir / "reports"
     
@@ -91,7 +103,7 @@ def main():
     reports_dir.mkdir(exist_ok=True)
     
     # Verificar arquivos
-    eval_pairs_path = outputs_dir / "eval_pairs_assigned.parquet"
+    eval_pairs_path = outputs_dir / f"eval_pairs_assigned{suffix}.parquet"
     topics_path = outputs_dir / "canonical_topics.parquet"
     
     if not eval_pairs_path.exists():
@@ -149,7 +161,7 @@ def main():
     print(f"  {len(df_sessions)} sessões válidas (|R_session| >= 2)")
     
     # Exportar dados de sessão
-    session_path = debug_dir / "gh_sessions_level.csv"
+    session_path = debug_dir / f"gh_sessions_level{suffix}.csv"
     df_sessions.to_csv(session_path, index=False)
     print(f"  Dados salvos: {session_path}")
     
@@ -177,7 +189,7 @@ def main():
     print(f"  {len(df_users)} usuários processados")
     
     # Exportar dados de usuário
-    user_path = debug_dir / "gh_user_session_based.csv"
+    user_path = debug_dir / f"gh_user_session_based{suffix}.csv"
     df_users.to_csv(user_path, index=False)
     print(f"  Dados salvos: {user_path}")
     
@@ -218,7 +230,7 @@ def main():
     df_table61['p-valor'] = df_table61['p-valor'].apply(lambda x: f'{x:.4f}' if not pd.isna(x) else 'NaN')
     
     # Exportar Tabela 6.1
-    table61_path = outputs_dir / "tabela_6_1_GH_interacao_session_based.csv"
+    table61_path = outputs_dir / f"tabela_6_1_GH_interacao_session_based{suffix}.csv"
     df_table61.to_csv(table61_path, index=False)
     
     print("\n" + "=" * 80)
@@ -232,7 +244,7 @@ def main():
     print("\nETAPA 4: Comparação com abordagem global...")
     
     # Carregar dados da auditoria (abordagem global)
-    audit_path = debug_dir / "R_size_audit.csv"
+    audit_path = debug_dir / f"R_size_audit{suffix}.csv"
     
     if audit_path.exists():
         df_global = pd.read_csv(audit_path)
@@ -271,7 +283,7 @@ def main():
         print(df_comp_stats.to_string(index=False))
         
         # Exportar comparação
-        comp_path = debug_dir / "gh_session_vs_global_comparison.csv"
+        comp_path = debug_dir / f"gh_session_vs_global_comparison{suffix}.csv"
         df_comp_stats.to_csv(comp_path, index=False)
         print(f"\nComparação salva: {comp_path}")
     
@@ -352,7 +364,7 @@ def main():
             report_lines.append("**Valores ainda acima de 1.0 - revisar normalização**\n")
     
     # Salvar relatório
-    report_path = reports_dir / "table61_session_based_report.md"
+    report_path = reports_dir / f"table61_session_based_report{suffix}.md"
     report_path.write_text("\n".join(report_lines), encoding='utf-8')
     
     print(f"\nRelatório salvo: {report_path}")
@@ -360,7 +372,7 @@ def main():
     print("\n" + "=" * 80)
     print("PROCESSO CONCLUÍDO")
     print("=" * 80)
-    print("\nArquivos gerados:")
+    print("\nArquivos gerados para {label}:")
     print(f"  1. {session_path} (sessões individuais)")
     print(f"  2. {user_path} (usuários agregados)")
     print(f"  3. {table61_path} (Tabela 6.1 final)")
@@ -368,7 +380,86 @@ def main():
         print(f"  4. {comp_path} (comparação sessão vs global)")
     print(f"  5. {report_path} (relatório completo)")
     
-    return 0
+    return True
+
+
+def main():
+    """Main com suporte a múltiplas representações."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Calcular GH por sessão para diferentes representações'
+    )
+    parser.add_argument(
+        '--representations',
+        nargs='+',
+        help='Lista de sufixos de representação (ex: ae_features+ae_topics bin_features+ae_topics)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        default='outputs',
+        help='Diretório de outputs (padrão: outputs)'
+    )
+    
+    args = parser.parse_args()
+    
+    outputs_dir = Path(args.output_dir)
+    
+    # Auto-detectar representações se não especificadas
+    if args.representations:
+        representations = [(f"_{rep}", rep) for rep in args.representations]
+    else:
+        # Buscar todos os arquivos eval_pairs_assigned*.parquet
+        eval_files = list(outputs_dir.glob("eval_pairs_assigned*.parquet"))
+        
+        if not eval_files:
+            print("ERRO: Nenhum arquivo eval_pairs_assigned encontrado")
+            return 1
+        
+        representations = []
+        for file in eval_files:
+            # Extrair sufixo do nome do arquivo
+            filename = file.stem  # eval_pairs_assigned ou eval_pairs_assigned_XXX
+            if filename == "eval_pairs_assigned":
+                # Arquivo default (sem sufixo)
+                representations.append((None, "default"))
+            else:
+                # Extrair sufixo após 'eval_pairs_assigned_'
+                suffix = filename.replace("eval_pairs_assigned_", "")
+                representations.append((f"_{suffix}", suffix))
+    
+    print("=" * 80)
+    print("CÁLCULO DE GH POR SESSÃO (Abordagem da Tese)")
+    print("=" * 80)
+    print(f"\n⚙ Processando {len(representations)} representações\n")
+    
+    success_count = 0
+    
+    for idx, (suffix, label) in enumerate(representations, 1):
+        print(f"\n[{idx}/{len(representations)}]\n")
+        
+        try:
+            success = process_representation(
+                outputs_dir=outputs_dir,
+                representation_suffix=suffix,
+                representation_label=label
+            )
+            
+            if success:
+                success_count += 1
+        except Exception as e:
+            print(f"\nERRO ao processar {label}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    print("\n" + "=" * 80)
+    if success_count == len(representations):
+        print("CONCLUÍDO! Todas as representações foram processadas com sucesso.")
+    else:
+        print(f"CONCLUÍDO COM AVISOS: {success_count}/{len(representations)} processadas com sucesso.")
+    print("=" * 80)
+    
+    return 0 if success_count > 0 else 1
 
 
 if __name__ == "__main__":

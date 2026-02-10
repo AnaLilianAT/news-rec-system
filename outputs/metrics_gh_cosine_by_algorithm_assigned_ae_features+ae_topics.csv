@@ -1,0 +1,10 @@
+algorithm,mean_gh_cosine,median_gh_cosine,std_gh_cosine,n_lists
+knn_item_item,0.2511,0.2436,0.0294,206
+knn_item_item-mmr-diversification,0.1647,0.1643,0.0177,71
+knn_item_item-topic-diversification,0.2343,0.236,0.0252,70
+knn_user_user,0.2328,0.2306,0.0259,81
+knn_user_user-mmr-diversification,0.1693,0.166,0.0216,48
+knn_user_user-topic-diversification,0.2371,0.2378,0.0316,99
+svd,0.2385,0.238,0.028,66
+svd-mmr-diversification,0.2523,0.2524,0.0263,56
+svd-topic-diversification,0.2554,0.2508,0.0283,78

@@ -1,0 +1,10 @@
+algorithm,mean_gh_jaccard,median_gh_jaccard,std_gh_jaccard,n_lists
+knn_item_item,0.1217,0.1278,0.0166,206
+knn_item_item-mmr-diversification,0.0847,0.0856,0.013,71
+knn_item_item-topic-diversification,0.1082,0.1064,0.0154,70
+knn_user_user,0.1188,0.1155,0.0232,81
+knn_user_user-mmr-diversification,0.088,0.0862,0.0135,48
+knn_user_user-topic-diversification,0.114,0.1142,0.0193,99
+svd,0.1092,0.105,0.0168,66
+svd-mmr-diversification,0.1004,0.1005,0.0117,56
+svd-topic-diversification,0.108,0.1077,0.015,78

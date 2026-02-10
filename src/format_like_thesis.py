@@ -1,13 +1,19 @@
 """
 Módulo para formatar tabelas no formato exato da tese.
+
+Usa interface padronizada de representações e similaridades.
 """
 
 import pandas as pd
 import numpy as np
 from scipy import stats
 from itertools import combinations
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
+from pathlib import Path
 import warnings
+
+from .representations import get_item_representation, prepare_item_vectors
+from .similarity import compute_homogeneity, jaccard_similarity_sets
 
 warnings.filterwarnings('ignore')
 
@@ -85,7 +91,12 @@ def shapiro_p(values) -> float:
 
 
 def compute_jaccard(set_a, set_b):
-    """Calcula similaridade de Jaccard entre dois conjuntos."""
+    """
+    Calcula similaridade de Jaccard entre dois conjuntos.
+    
+    NOTA: Mantida por compatibilidade. Para novos desenvolvimentos,
+    usar jaccard_similarity_sets() do módulo similarity.
+    """
     if len(set_a) == 0 and len(set_b) == 0:
         return 1.0
     intersection = len(set_a & set_b)
@@ -95,7 +106,12 @@ def compute_jaccard(set_a, set_b):
     return intersection / union
 
 
-def compute_GH_interaction_jaccard(eval_pairs: pd.DataFrame, topics: pd.DataFrame) -> pd.DataFrame:
+def compute_GH_interaction_jaccard(
+    eval_pairs: pd.DataFrame,
+    topics: pd.DataFrame,
+    representation_type: str = 'bin_topics',
+    output_dir: str = 'outputs'
+) -> pd.DataFrame:
     """
     Calcula GH (Jaccard) para itens recomendados e interagidos (Tabela 6.1).
     
@@ -106,7 +122,47 @@ def compute_GH_interaction_jaccard(eval_pairs: pd.DataFrame, topics: pd.DataFram
     
     IMPORTANTE: Usa normalização por |R| (não por #pares) para reproduzir escala da tese.
     
-    Retorna DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
+    Args:
+        eval_pairs: DataFrame com itens expostos por usuário
+        topics: DataFrame com tópicos (usado se representation_type='bin_topics')
+        representation_type: Tipo de representação ('bin_topics' ou 'ae_topics')
+        output_dir: Diretório base dos outputs
+    
+    Returns:
+        DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
+    """
+    # Se usando representação binária (modo atual), usar código original
+    if representation_type == 'bin_topics':
+        return _compute_GH_interaction_jaccard_legacy(eval_pairs, topics)
+    
+    # Futuramente: suportar embeddings com cosine
+    # elif representation_type == 'ae_topics':
+    #     topics_rep = get_item_representation(representation_type, output_dir=output_dir)
+    #     topic_vectors = prepare_item_vectors(topics_rep)
+    #     return _compute_GH_interaction_cosine(eval_pairs, topic_vectors)
+    
+    else:
+        raise ValueError(
+            f"Representação não suportada: '{representation_type}'. "
+            f"Use 'bin_topics' ou 'ae_topics' (futuro)"
+        )
+
+
+def _compute_GH_interaction_jaccard_legacy(eval_pairs: pd.DataFrame, topics: pd.DataFrame) -> pd.DataFrame:
+    """
+    Implementação original de GH com Jaccard sobre tópicos binários.
+    
+    Mantida intacta para garantir compatibilidade de resultados.
+    
+    Para cada usuário:
+    - Pegar itens expostos (do eval_pairs)
+    - Calcular Jaccard entre todos os pares de itens (usando tópicos)
+    - GH_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
+    
+    IMPORTANTE: Usa normalização por |R| (não por #pares) para reproduzir escala da tese.
+    
+    Returns:
+        DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
     """
     # Preparar tópicos
     topics_dict = {}
@@ -151,7 +207,12 @@ def compute_GH_interaction_jaccard(eval_pairs: pd.DataFrame, topics: pd.DataFram
 
 
 def compute_cosine_similarity(vec_a, vec_b):
-    """Calcula similaridade do cosseno entre dois vetores."""
+    """
+    Calcula similaridade do cosseno entre dois vetores.
+    
+    NOTA: Mantida por compatibilidade. Para novos desenvolvimentos,
+    usar cosine_similarity() do módulo similarity.
+    """
     norm_a = np.linalg.norm(vec_a)
     norm_b = np.linalg.norm(vec_b)
     
@@ -161,7 +222,12 @@ def compute_cosine_similarity(vec_a, vec_b):
     return np.dot(vec_a, vec_b) / (norm_a * norm_b)
 
 
-def compute_GH_lists_cosine(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+def compute_GH_lists_cosine(
+    reclists: pd.DataFrame,
+    features: pd.DataFrame,
+    representation_type: str = 'bin_features',
+    output_dir: str = 'outputs'
+) -> pd.DataFrame:
     """
     Calcula GH (cosseno) para listas de recomendação (Tabela 6.6).
     
@@ -171,7 +237,40 @@ def compute_GH_lists_cosine(reclists: pd.DataFrame, features: pd.DataFrame) -> p
     
     Depois agregar por usuário: GH_user = média das GH_list do usuário
     
-    Retorna DataFrame com colunas: [user_id, algorithm, gh_cosine_lists, n_lists]
+    Args:
+        reclists: DataFrame com listas top-20
+        features: DataFrame com features (usado se representation_type='bin_features')
+        representation_type: Tipo de representação ('bin_features' ou 'ae_features')
+        output_dir: Diretório base dos outputs
+    
+    Returns:
+        DataFrame com colunas: [user_id, algorithm, gh_cosine_lists, n_lists]
+    """
+    # Se usando representação binária (modo atual), usar código original
+    if representation_type == 'bin_features':
+        return _compute_GH_lists_cosine_legacy(reclists, features)
+    
+    # Futuramente: suportar embeddings
+    # elif representation_type == 'ae_features':
+    #     features_rep = get_item_representation(representation_type, output_dir=output_dir)
+    #     feature_vectors = prepare_item_vectors(features_rep)
+    #     return _compute_GH_lists_cosine_with_vectors(reclists, feature_vectors)
+    
+    else:
+        raise ValueError(
+            f"Representação não suportada: '{representation_type}'. "
+            f"Use 'bin_features' ou 'ae_features' (futuro)"
+        )
+
+
+def _compute_GH_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+    """
+    Implementação original de GH com cosseno sobre features binárias.
+    
+    Mantida intacta para garantir compatibilidade de resultados.
+    
+    Returns:
+        DataFrame com colunas: [user_id, algorithm, gh_cosine_lists, n_lists]
     """
     # Preparar features como vetores
     features_dict = {}

@@ -14,11 +14,21 @@ warnings.filterwarnings('ignore')
 
 from .diversify import apply_diversification
 from .io_loaders import load_tsv
+from .representations import get_item_representation, prepare_item_vectors
 
 
-def load_input_data(output_dir: Path = Path('outputs')):
+def load_input_data(
+    output_dir: Path = Path('outputs'),
+    feature_representation: str = 'bin_features',
+    topic_representation: str = 'bin_topics'
+):
     """
     Carrega dados de entrada necessários para gerar as listas.
+    
+    Args:
+        output_dir: Diretório com outputs do pipeline
+        feature_representation: Tipo de representação de features ('bin_features' ou 'ae_features')
+        topic_representation: Tipo de representação de tópicos ('bin_topics' ou 'ae_topics')
     
     Returns:
         Tupla (predictions_df, features_df, topics_df, users_df)
@@ -30,15 +40,17 @@ def load_input_data(output_dir: Path = Path('outputs')):
     predictions_df = pd.read_parquet(predictions_path)
     print(f"Predições: {len(predictions_df):,} registros")
     
-    # Features (para MMR)
-    features_path = output_dir / 'canonical_features.parquet'
-    features_df = pd.read_parquet(features_path)
-    print(f"Features: {len(features_df):,} notícias")
+    # Features (via nova interface de representações)
+    print(f"Carregando representação de features: {feature_representation}")
+    features_rep = get_item_representation(feature_representation, output_dir=str(output_dir))
+    features_df = features_rep.matrix
+    print(f"Features: {len(features_df):,} notícias, {len(features_rep.feature_names)} dimensões")
     
-    # Tópicos (para TD)
-    topics_path = output_dir / 'canonical_topics.parquet'
-    topics_df = pd.read_parquet(topics_path)
-    print(f"Tópicos: {len(topics_df):,} notícias")
+    # Tópicos (via nova interface de representações)
+    print(f"Carregando representação de tópicos: {topic_representation}")
+    topics_rep = get_item_representation(topic_representation, output_dir=str(output_dir))
+    topics_df = topics_rep.matrix
+    print(f"Tópicos: {len(topics_df):,} notícias, {len(topics_rep.feature_names)} dimensões")
     
     # Usuários (para recuperar algoritmo original)
     users_path = Path('dataset') / 'users.csv'
@@ -51,6 +63,9 @@ def load_input_data(output_dir: Path = Path('outputs')):
 def prepare_feature_vectors(features_df: pd.DataFrame) -> Dict[int, np.ndarray]:
     """
     Prepara dicionário de vetores de features por news_id.
+    
+    NOTA: Esta função é mantida por compatibilidade com o código existente.
+    Para novos desenvolvimentos, usar prepare_item_vectors() do módulo representations.
     
     Args:
         features_df: DataFrame com news_id e colunas de features
@@ -73,6 +88,9 @@ def prepare_topic_vectors(topics_df: pd.DataFrame) -> Dict[int, np.ndarray]:
     """
     Prepara dicionário de vetores de tópicos por news_id.
     
+    NOTA: Esta função é mantida por compatibilidade com o código existente.
+    Para novos desenvolvimentos, usar prepare_item_vectors() do módulo representations.
+    
     Args:
         topics_df: DataFrame com news_id e Topic0..Topic15
     
@@ -84,7 +102,11 @@ def prepare_topic_vectors(topics_df: pd.DataFrame) -> Dict[int, np.ndarray]:
     available_topic_cols = [col for col in topic_cols if col in topics_df.columns]
     
     if not available_topic_cols:
-        print("Nenhuma coluna de tópicos encontrada em canonical_topics.parquet")
+        # Tentar colunas genéricas (para suporte a embeddings no futuro)
+        available_topic_cols = [col for col in topics_df.columns if col != 'news_id']
+    
+    if not available_topic_cols:
+        print("AVISO: Nenhuma coluna de features encontrada no DataFrame de tópicos")
         return {}
     
     topic_vectors = {}
@@ -188,7 +210,8 @@ def generate_reclists(
 def save_reclists(
     reclists_df: pd.DataFrame,
     stats: Dict,
-    output_dir: Path = Path('outputs')
+    output_dir: Path = Path('outputs'),
+    representation_suffix: str = None
 ):
     """
     Salva listas top-20 e relatório.
@@ -197,9 +220,15 @@ def save_reclists(
         reclists_df: DataFrame com listas geradas
         stats: Estatísticas da geração
         output_dir: Diretório de saída
+        representation_suffix: Sufixo para diferenciar representações (ex: 'ae_features')
     """
+    # Determinar nome do arquivo
+    if representation_suffix:
+        output_path = output_dir / f'reclists_top20_assigned_{representation_suffix}.parquet'
+    else:
+        output_path = output_dir / 'reclists_top20_assigned.parquet'
+    
     # Salvar parquet
-    output_path = output_dir / 'reclists_top20_assigned.parquet'
     reclists_df.to_parquet(output_path, index=False)
     
     file_size_kb = output_path.stat().st_size / 1024
@@ -210,7 +239,11 @@ def save_reclists(
     # Gerar relatório
     report_dir = output_dir / 'reports'
     report_dir.mkdir(exist_ok=True)
-    report_path = report_dir / 'reclists_report_assigned.md'
+    
+    if representation_suffix:
+        report_path = report_dir / f'reclists_report_assigned_{representation_suffix}.md'
+    else:
+        report_path = report_dir / 'reclists_report_assigned.md'
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write("# Relatório de Geração de Listas Top-20 (ALL-BETWEEN)\n\n")
@@ -270,32 +303,125 @@ def main():
     """
     Função principal: gera listas top-20 com diversificação.
     """
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Gera listas top-20 com diversificação por algoritmo atribuído'
+    )
+    parser.add_argument(
+        '--feature-representation',
+        type=str,
+        default='bin_features',
+        choices=['bin_features', 'ae_features'],
+        help='Tipo de representação de features (default: bin_features). Ignorado se --representations usado.'
+    )
+    parser.add_argument(
+        '--topic-representation',
+        type=str,
+        default='bin_topics',
+        choices=['bin_topics', 'ae_topics'],
+        help='Tipo de representação de tópicos (default: bin_topics). Ignorado se --representations usado.'
+    )
+    parser.add_argument(
+        '--representations',
+        type=str,
+        nargs='+',
+        choices=['bin_features', 'ae_features', 'bin_topics', 'ae_topics'],
+        help='Rodar com múltiplas representações (ex: --representations bin_features ae_features)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='outputs',
+        help='Diretório base dos outputs (default: outputs)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determinar quais representações processar
+    if args.representations:
+        # Modo múltiplas representações - APENAS pares homogêneos
+        # Gera apenas: ae_features+ae_topics e bin_features+bin_topics
+        representations_to_process = []
+        
+        # Organizar em pares (features, topics)
+        feature_reps = [r for r in args.representations if 'features' in r]
+        topic_reps = [r for r in args.representations if 'topics' in r]
+        
+        # Garantir que temos pelo menos uma de cada
+        if not feature_reps:
+            feature_reps = ['bin_features']
+        if not topic_reps:
+            topic_reps = ['bin_topics']
+        
+        # NOVA LÓGICA: Criar apenas pares homogêneos (mesma representação para features e topics)
+        # Se ae_features está presente e ae_topics também, gera ae_features+ae_topics
+        if 'ae_features' in feature_reps and 'ae_topics' in topic_reps:
+            representations_to_process.append(('ae_features', 'ae_topics'))
+        
+        # Se bin_features está presente e bin_topics também, gera bin_features+bin_topics
+        if 'bin_features' in feature_reps and 'bin_topics' in topic_reps:
+            representations_to_process.append(('bin_features', 'bin_topics'))
+    else:
+        # Modo single representação (default)
+        representations_to_process = [(args.feature_representation, args.topic_representation)]
+    
     print("=" * 70)
     print("  GERAÇÃO DE LISTAS TOP-20 (ALL-BETWEEN)")
     print("=" * 70)
     
-    # Carregar dados
-    predictions_df, features_df, topics_df, users_df = load_input_data()
+    if len(representations_to_process) > 1:
+        print(f"\n⚙ Modo múltiplas representações: {len(representations_to_process)} combinações")
     
-    # Preparar vetores
-    print("\nPreparando vetores...")
-    feature_vectors = prepare_feature_vectors(features_df)
-    print(f"Feature vectors: {len(feature_vectors):,}")
-    
-    topic_vectors = prepare_topic_vectors(topics_df)
-    print(f"Topic vectors: {len(topic_vectors):,}")
-    
-    # Gerar listas
-    reclists_df, stats = generate_reclists(
-        predictions_df=predictions_df,
-        feature_vectors=feature_vectors,
-        topic_vectors=topic_vectors,
-        users_df=users_df,
-        k=20
-    )
-    
-    # Salvar resultados
-    save_reclists(reclists_df, stats)
+    # Processar cada representação
+    for idx, (feat_rep, topic_rep) in enumerate(representations_to_process, 1):
+        if len(representations_to_process) > 1:
+            print(f"\n{'='*70}")
+            print(f"  PROCESSANDO [{idx}/{len(representations_to_process)}]: {feat_rep} + {topic_rep}")
+            print(f"{'='*70}")
+        
+        print(f"\nConfigurações:")
+        print(f"  - Representação de features: {feat_rep}")
+        print(f"  - Representação de tópicos: {topic_rep}")
+        print(f"  - Diretório de saída: {args.output_dir}")
+        
+        # Carregar dados (com representação escolhida)
+        predictions_df, features_df, topics_df, users_df = load_input_data(
+            output_dir=Path(args.output_dir),
+            feature_representation=feat_rep,
+            topic_representation=topic_rep
+        )
+        
+        # Preparar vetores
+        print("\nPreparando vetores...")
+        feature_vectors = prepare_feature_vectors(features_df)
+        print(f"Feature vectors: {len(feature_vectors):,}")
+        
+        topic_vectors = prepare_topic_vectors(topics_df)
+        print(f"Topic vectors: {len(topic_vectors):,}")
+        
+        # Gerar listas
+        reclists_df, stats = generate_reclists(
+            predictions_df=predictions_df,
+            feature_vectors=feature_vectors,
+            topic_vectors=topic_vectors,
+            users_df=users_df,
+            k=20
+        )
+        
+        # Determinar sufixo para arquivos
+        if len(representations_to_process) > 1:
+            # Modo múltiplas: usar sufixo composto
+            suffix = f"{feat_rep}+{topic_rep}"
+        else:
+            # Modo single: só usar sufixo se não for default
+            if feat_rep == 'bin_features' and topic_rep == 'bin_topics':
+                suffix = None  # Default: sem sufixo
+            else:
+                suffix = f"{feat_rep}+{topic_rep}"
+        
+        # Salvar resultados
+        save_reclists(reclists_df, stats, output_dir=Path(args.output_dir), representation_suffix=suffix)
     
     print("\n" + "=" * 70)
     print("  GERAÇÃO CONCLUÍDA COM SUCESSO!")

@@ -15,30 +15,47 @@ from pathlib import Path
 # Adicionar src ao path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from format_like_thesis import (
-    normalize_algorithm_name,
-    compute_GH_interaction_jaccard,
-    compute_GH_lists_cosine,
-    compute_RMSE_user,
-    aggregate_like_thesis,
-    format_table_for_export
-)
+from . import format_like_thesis
+
+normalize_algorithm_name = format_like_thesis.normalize_algorithm_name
+compute_GH_interaction_jaccard = format_like_thesis.compute_GH_interaction_jaccard
+compute_GH_lists_cosine = format_like_thesis.compute_GH_lists_cosine
+compute_RMSE_user = format_like_thesis.compute_RMSE_user
+aggregate_like_thesis = format_like_thesis.aggregate_like_thesis
+format_table_for_export = format_like_thesis.format_table_for_export
 
 
-def main():
-    print("=" * 80)
-    print("GERAÇÃO DE TABELAS NO FORMATO DA TESE")
-    print("=" * 80)
+def process_representation(
+    outputs_dir: Path,
+    representation_suffix: str = None,
+    representation_label: str = None
+):
+    """
+    Processa uma representação e gera tabelas no formato da tese.
     
-    # Diretórios
-    outputs_dir = Path("outputs")
+    Args:
+        outputs_dir: Diretório de outputs
+        representation_suffix: Sufixo dos arquivos (ex: 'ae_features+ae_topics')
+        representation_label: Label para display (ex: 'ae_features+ae_topics')
+    
+    Returns:
+        0 se sucesso, 1 se erro
+    """
     reports_dir = outputs_dir / "reports"
     reports_dir.mkdir(exist_ok=True)
     
+    # Determinar sufixo para arquivos
+    suffix = f"_{representation_suffix}" if representation_suffix else ""
+    label = representation_label or "default (bin_features+bin_topics)"
+    
+    print(f"\n{'='*80}")
+    print(f"PROCESSANDO: {label}")
+    print(f"{'='*80}")
+    
     # Verificar arquivos necessários
     required_files = {
-        'eval_pairs': outputs_dir / "eval_pairs_assigned.parquet",
-        'reclists': outputs_dir / "reclists_top20_assigned.parquet",
+        'eval_pairs': outputs_dir / f"eval_pairs_assigned{suffix}.parquet",
+        'reclists': outputs_dir / f"reclists_top20_assigned{suffix}.parquet",
         'features': outputs_dir / "canonical_features.parquet",
         'topics': outputs_dir / "canonical_topics.parquet"
     }
@@ -49,10 +66,10 @@ def main():
             missing.append(f"{name}: {path}")
     
     if missing:
-        print("\nERRO: Arquivos necessários não encontrados:")
+        print(f"\nAVISO: Arquivos necessários não encontrados para {label}:")
         for m in missing:
             print(f"  - {m}")
-        print("\nExecute as etapas anteriores do pipeline antes de rodar este script.")
+        print(f"Pulando esta representação...")
         return 1
     
     print("\nTodos os arquivos necessários foram encontrados")
@@ -110,7 +127,7 @@ def main():
         
         # Formatar e exportar
         table_6_1_formatted = format_table_for_export(table_6_1, decimal_places=3)
-        output_path_6_1 = outputs_dir / "tabela_6_1_GH_interacao.csv"
+        output_path_6_1 = outputs_dir / f"tabela_6_1_GH_interacao{suffix}.csv"
         table_6_1_formatted.to_csv(output_path_6_1, index=False)
         
         print(f"\nTabela salva em: {output_path_6_1}")
@@ -159,7 +176,7 @@ def main():
         
         # Formatar e exportar
         table_6_6_formatted = format_table_for_export(table_6_6, decimal_places=3)
-        output_path_6_6 = outputs_dir / "tabela_6_6_GH_listas.csv"
+        output_path_6_6 = outputs_dir / f"tabela_6_6_GH_listas{suffix}.csv"
         table_6_6_formatted.to_csv(output_path_6_6, index=False)
         
         print(f"\nTabela salva em: {output_path_6_6}")
@@ -209,7 +226,7 @@ def main():
         
         # Formatar e exportar
         table_6_3_formatted = format_table_for_export(table_6_3, decimal_places=3)
-        output_path_6_3 = outputs_dir / "tabela_6_3_RMSE.csv"
+        output_path_6_3 = outputs_dir / f"tabela_6_3_RMSE{suffix}.csv"
         table_6_3_formatted.to_csv(output_path_6_3, index=False)
         
         print(f"\nTabela salva em: {output_path_6_3}")
@@ -234,7 +251,7 @@ def main():
     # ========================================================================
     # Salvar relatório
     # ========================================================================
-    report_path = reports_dir / "thesis_format_report.md"
+    report_path = reports_dir / f"thesis_format_report{suffix}.md"
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(report_lines))
     
@@ -242,14 +259,98 @@ def main():
     print(f"Relatório salvo em: {report_path}")
     print("=" * 80)
     
-    print("\nCONCLUÍDO! As três tabelas foram geradas com sucesso.")
-    print("\nArquivos gerados:")
+    print(f"\nTabelas geradas para {label}:")
     print(f"  1. {output_path_6_1}")
     print(f"  2. {output_path_6_6}")
     print(f"  3. {output_path_6_3}")
     print(f"  4. {report_path}")
     
     return 0
+
+
+def main():
+    """
+    Função principal: gera tabelas no formato da tese para múltiplas representações.
+    """
+    import argparse
+    
+    parser = argparse.ArgumentParser(
+        description='Gera tabelas no formato da tese a partir das métricas calculadas'
+    )
+    parser.add_argument(
+        '--representations',
+        type=str,
+        nargs='+',
+        help='Sufixos de representações a processar (ex: bin_features+bin_topics ae_features+ae_topics)'
+    )
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='outputs',
+        help='Diretório de saída (default: outputs)'
+    )
+    
+    args = parser.parse_args()
+    
+    print("=" * 80)
+    print("GERAÇÃO DE TABELAS NO FORMATO DA TESE")
+    print("=" * 80)
+    
+    outputs_dir = Path(args.output_dir)
+    
+    # Determinar quais representações processar
+    if args.representations:
+        # Processar representações especificadas
+        representations_to_process = args.representations
+    else:
+        # Auto-detectar arquivos eval_pairs disponíveis
+        eval_files = list(outputs_dir.glob('eval_pairs_assigned*.parquet'))
+        representations_to_process = []
+        
+        for file in eval_files:
+            filename = file.stem  # eval_pairs_assigned ou eval_pairs_assigned_XXX
+            if filename == 'eval_pairs_assigned':
+                representations_to_process.append(None)  # Default
+            else:
+                # Extrair sufixo
+                suffix = filename.replace('eval_pairs_assigned_', '')
+                representations_to_process.append(suffix)
+        
+        if not representations_to_process:
+            print("\nERRO: Nenhum arquivo eval_pairs_assigned*.parquet encontrado")
+            print("Execute as etapas anteriores do pipeline antes de rodar este script.")
+            return 1
+    
+    if len(representations_to_process) > 1:
+        print(f"\n⚙ Processando {len(representations_to_process)} representações")
+    
+    # Processar cada representação
+    success_count = 0
+    for idx, suffix in enumerate(representations_to_process, 1):
+        if len(representations_to_process) > 1:
+            label = suffix or "default (bin_features+bin_topics)"
+            print(f"\n[{idx}/{len(representations_to_process)}]")
+        else:
+            label = suffix or "default"
+        
+        result = process_representation(
+            outputs_dir=outputs_dir,
+            representation_suffix=suffix,
+            representation_label=label
+        )
+        
+        if result == 0:
+            success_count += 1
+    
+    # Resumo final
+    print("\n" + "=" * 80)
+    if success_count == len(representations_to_process):
+        print("CONCLUÍDO! Todas as tabelas foram geradas com sucesso.")
+    else:
+        print(f"CONCLUÍDO com avisos: {success_count}/{len(representations_to_process)} representações processadas.")
+    print("=" * 80)
+    
+    return 0 if success_count > 0 else 1
 
 
 if __name__ == "__main__":
