@@ -28,7 +28,8 @@ format_table_for_export = format_like_thesis.format_table_for_export
 def process_representation(
     outputs_dir: Path,
     representation_suffix: str = None,
-    representation_label: str = None
+    representation_label: str = None,
+    embedding_dim: int = None
 ):
     """
     Processa uma representação e gera tabelas no formato da tese.
@@ -37,15 +38,28 @@ def process_representation(
         outputs_dir: Diretório de outputs
         representation_suffix: Sufixo dos arquivos (ex: 'ae_features+ae_topics')
         representation_label: Label para display (ex: 'ae_features+ae_topics')
+        embedding_dim: Dimensão do embedding (opcional, para incluir no nome do arquivo)
     
     Returns:
         0 se sucesso, 1 se erro
     """
+    # Criar diretório tabelas/
+    tables_dir = outputs_dir / "tabelas"
+    tables_dir.mkdir(exist_ok=True)
+    
     reports_dir = outputs_dir / "reports"
     reports_dir.mkdir(exist_ok=True)
     
-    # Determinar sufixo para arquivos
-    suffix = f"_{representation_suffix}" if representation_suffix else ""
+    # Determinar sufixo para arquivos de entrada (eval_pairs, reclists)
+    # Esses arquivos NÃO incluem a dimensão no nome
+    input_suffix = f"_{representation_suffix}" if representation_suffix else ""
+    
+    # Determinar sufixo para arquivos de saída (tabelas)
+    # Esses arquivos incluem a dimensão no nome
+    output_suffix = input_suffix
+    if embedding_dim is not None:
+        output_suffix += f"_dim{embedding_dim}"
+    
     label = representation_label or "default (bin_features+bin_topics)"
     
     print(f"\n{'='*80}")
@@ -54,8 +68,8 @@ def process_representation(
     
     # Verificar arquivos necessários
     required_files = {
-        'eval_pairs': outputs_dir / f"eval_pairs_assigned{suffix}.parquet",
-        'reclists': outputs_dir / f"reclists_top20_assigned{suffix}.parquet",
+        'eval_pairs': outputs_dir / f"eval_pairs_assigned{input_suffix}.parquet",
+        'reclists': outputs_dir / f"reclists_top20_assigned{input_suffix}.parquet",
         'features': outputs_dir / "canonical_features.parquet",
         'topics': outputs_dir / "canonical_topics.parquet"
     }
@@ -127,7 +141,7 @@ def process_representation(
         
         # Formatar e exportar
         table_6_1_formatted = format_table_for_export(table_6_1, decimal_places=3)
-        output_path_6_1 = outputs_dir / f"tabela_6_1_GH_interacao{suffix}.csv"
+        output_path_6_1 = tables_dir / f"tabela_6_1_GH_interacao{output_suffix}.csv"
         table_6_1_formatted.to_csv(output_path_6_1, index=False)
         
         print(f"\nTabela salva em: {output_path_6_1}")
@@ -176,7 +190,7 @@ def process_representation(
         
         # Formatar e exportar
         table_6_6_formatted = format_table_for_export(table_6_6, decimal_places=3)
-        output_path_6_6 = outputs_dir / f"tabela_6_6_GH_listas{suffix}.csv"
+        output_path_6_6 = tables_dir / f"tabela_6_6_GH_listas{output_suffix}.csv"
         table_6_6_formatted.to_csv(output_path_6_6, index=False)
         
         print(f"\nTabela salva em: {output_path_6_6}")
@@ -226,7 +240,7 @@ def process_representation(
         
         # Formatar e exportar
         table_6_3_formatted = format_table_for_export(table_6_3, decimal_places=3)
-        output_path_6_3 = outputs_dir / f"tabela_6_3_RMSE{suffix}.csv"
+        output_path_6_3 = tables_dir / f"tabela_6_3_RMSE{output_suffix}.csv"
         table_6_3_formatted.to_csv(output_path_6_3, index=False)
         
         print(f"\nTabela salva em: {output_path_6_3}")
@@ -289,6 +303,11 @@ def main():
         default='outputs',
         help='Diretório de saída (default: outputs)'
     )
+    parser.add_argument(
+        '--embedding-dim',
+        type=int,
+        help='Dimensão do embedding (incluída no nome dos arquivos)'
+    )
     
     args = parser.parse_args()
     
@@ -322,7 +341,7 @@ def main():
             return 1
     
     if len(representations_to_process) > 1:
-        print(f"\n⚙ Processando {len(representations_to_process)} representações")
+        print(f"\n[INFO] Processando {len(representations_to_process)} representações")
     
     # Processar cada representação
     success_count = 0
@@ -336,7 +355,8 @@ def main():
         result = process_representation(
             outputs_dir=outputs_dir,
             representation_suffix=suffix,
-            representation_label=label
+            representation_label=label,
+            embedding_dim=args.embedding_dim
         )
         
         if result == 0:

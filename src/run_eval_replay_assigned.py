@@ -584,7 +584,7 @@ def main():
             return
     
     if len(suffixes_to_process) > 1:
-        print(f"\n⚙ Processando {len(suffixes_to_process)} representações")
+        print(f"\n[INFO] Processando {len(suffixes_to_process)} representações")
     
     # Processar cada representação
     for idx, suffix in enumerate(suffixes_to_process, 1):

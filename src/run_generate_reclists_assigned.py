@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -20,7 +20,8 @@ from .representations import get_item_representation, prepare_item_vectors
 def load_input_data(
     output_dir: Path = Path('outputs'),
     feature_representation: str = 'bin_features',
-    topic_representation: str = 'bin_topics'
+    topic_representation: str = 'bin_topics',
+    embedding_dim: Optional[int] = None
 ):
     """
     Carrega dados de entrada necessários para gerar as listas.
@@ -29,6 +30,7 @@ def load_input_data(
         output_dir: Diretório com outputs do pipeline
         feature_representation: Tipo de representação de features ('bin_features' ou 'ae_features')
         topic_representation: Tipo de representação de tópicos ('bin_topics' ou 'ae_topics')
+        embedding_dim: Dimensão dos embeddings (apenas para ae_features/ae_topics)
     
     Returns:
         Tupla (predictions_df, features_df, topics_df, users_df)
@@ -42,13 +44,21 @@ def load_input_data(
     
     # Features (via nova interface de representações)
     print(f"Carregando representação de features: {feature_representation}")
-    features_rep = get_item_representation(feature_representation, output_dir=str(output_dir))
+    features_rep = get_item_representation(
+        feature_representation, 
+        output_dir=str(output_dir),
+        embedding_dim=embedding_dim
+    )
     features_df = features_rep.matrix
     print(f"Features: {len(features_df):,} notícias, {len(features_rep.feature_names)} dimensões")
     
     # Tópicos (via nova interface de representações)
     print(f"Carregando representação de tópicos: {topic_representation}")
-    topics_rep = get_item_representation(topic_representation, output_dir=str(output_dir))
+    topics_rep = get_item_representation(
+        topic_representation, 
+        output_dir=str(output_dir),
+        embedding_dim=embedding_dim
+    )
     topics_df = topics_rep.matrix
     print(f"Tópicos: {len(topics_df):,} notícias, {len(topics_rep.feature_names)} dimensões")
     
@@ -335,6 +345,12 @@ def main():
         default='outputs',
         help='Diretório base dos outputs (default: outputs)'
     )
+    parser.add_argument(
+        '--embedding-dim',
+        type=int,
+        default=None,
+        help='Dimensão dos embeddings para representações ae_* (default: None = usa dim32)'
+    )
     
     args = parser.parse_args()
     
@@ -389,7 +405,8 @@ def main():
         predictions_df, features_df, topics_df, users_df = load_input_data(
             output_dir=Path(args.output_dir),
             feature_representation=feat_rep,
-            topic_representation=topic_rep
+            topic_representation=topic_rep,
+            embedding_dim=getattr(args, 'embedding_dim', None)
         )
         
         # Preparar vetores

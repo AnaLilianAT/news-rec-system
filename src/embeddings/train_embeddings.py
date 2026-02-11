@@ -313,13 +313,13 @@ def train_and_export_embeddings(
     
     if cache_valid_features and not force_retrain:
         if verbose:
-            print("\n✓ Cache válido encontrado. Reutilizando embeddings existentes.")
+            print("\n[OK] Cache válido encontrado. Reutilizando embeddings existentes.")
             print(f"  Arquivo: {features_output}")
     else:
         if force_retrain and verbose:
-            print("\n⚠ --force especificado. Retreinando modelo...")
+            print("\n[INFO] --force especificado. Retreinando modelo...")
         elif verbose:
-            print("\n✗ Cache inválido ou inexistente. Treinando novo modelo...")
+            print("\n[INFO] Cache inválido ou inexistente. Treinando novo modelo...")
         
         # Treinar autoencoder
         model_features = train_autoencoder(
@@ -387,13 +387,13 @@ def train_and_export_embeddings(
     
     if cache_valid_topics and not force_retrain:
         if verbose:
-            print("\n✓ Cache válido encontrado. Reutilizando embeddings existentes.")
+            print("\n[OK] Cache válido encontrado. Reutilizando embeddings existentes.")
             print(f"  Arquivo: {topics_output}")
     else:
         if force_retrain and verbose:
-            print("\n⚠ --force especificado. Retreinando modelo...")
+            print("\n[INFO] --force especificado. Retreinando modelo...")
         elif verbose:
-            print("\n✗ Cache inválido ou inexistente. Treinando novo modelo...")
+            print("\n[INFO] Cache inválido ou inexistente. Treinando novo modelo...")
         
         # Treinar autoencoder
         model_topics = train_autoencoder(

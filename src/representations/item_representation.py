@@ -57,6 +57,7 @@ def get_item_representation(
     kind: str,
     data_path: Optional[Path] = None,
     output_dir: str = 'outputs',
+    embedding_dim: Optional[int] = None,
     **kwargs
 ) -> ItemRepresentation:
     """
@@ -66,10 +67,12 @@ def get_item_representation(
         kind: Tipo de representação
               - 'bin_features': Features binárias + numéricas (canonical_features.parquet)
               - 'bin_topics': Tópicos binários (canonical_topics.parquet)
-              - 'ae_features': Embeddings de features (a implementar)
-              - 'ae_topics': Embeddings de tópicos (a implementar)
+              - 'ae_features': Embeddings de features
+              - 'ae_topics': Embeddings de tópicos
         data_path: Caminho explícito para o arquivo (opcional)
         output_dir: Diretório base dos outputs (default: 'outputs')
+        embedding_dim: Dimensão dos embeddings (apenas para ae_features/ae_topics).
+                      Se None, usa 32 como padrão ou detecta automaticamente.
         **kwargs: Argumentos adicionais (para futura compatibilidade)
     
     Returns:
@@ -82,13 +85,23 @@ def get_item_representation(
     output_path = Path(output_dir)
     
     # Mapear kind para arquivo padrão
-    # Para embeddings, usar dim32 como padrão (pode ser parametrizado no futuro)
-    default_paths = {
-        'bin_features': output_path / 'canonical_features.parquet',
-        'bin_topics': output_path / 'canonical_topics.parquet',
-        'ae_features': output_path / 'embeddings' / 'ae_features_dim32.parquet',
-        'ae_topics': output_path / 'embeddings' / 'ae_topics_dim32.parquet'
-    }
+    # Para embeddings, usar embedding_dim se fornecido, caso contrário dim32
+    if kind in ['ae_features', 'ae_topics'] and embedding_dim is not None:
+        # Construir path dinâmico baseado em embedding_dim
+        default_paths = {
+            'bin_features': output_path / 'canonical_features.parquet',
+            'bin_topics': output_path / 'canonical_topics.parquet',
+            'ae_features': output_path / 'embeddings' / f'ae_features_dim{embedding_dim}.parquet',
+            'ae_topics': output_path / 'embeddings' / f'ae_topics_dim{embedding_dim}.parquet'
+        }
+    else:
+        # Usar padrão dim32
+        default_paths = {
+            'bin_features': output_path / 'canonical_features.parquet',
+            'bin_topics': output_path / 'canonical_topics.parquet',
+            'ae_features': output_path / 'embeddings' / 'ae_features_dim32.parquet',
+            'ae_topics': output_path / 'embeddings' / 'ae_topics_dim32.parquet'
+        }
     
     if kind not in default_paths:
         raise ValueError(
