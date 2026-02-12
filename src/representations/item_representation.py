@@ -58,6 +58,7 @@ def get_item_representation(
     data_path: Optional[Path] = None,
     output_dir: str = 'outputs',
     embedding_dim: Optional[int] = None,
+    seed: Optional[int] = None,
     **kwargs
 ) -> ItemRepresentation:
     """
@@ -73,6 +74,8 @@ def get_item_representation(
         output_dir: Diretório base dos outputs (default: 'outputs')
         embedding_dim: Dimensão dos embeddings (apenas para ae_features/ae_topics).
                       Se None, usa 32 como padrão ou detecta automaticamente.
+        seed: Seed usada no treinamento do embedding (apenas para ae_features/ae_topics).
+              Se None, tenta encontrar arquivo mais recente ou usa busca por padrão.
         **kwargs: Argumentos adicionais (para futura compatibilidade)
     
     Returns:
@@ -84,47 +87,88 @@ def get_item_representation(
     """
     output_path = Path(output_dir)
     
-    # Mapear kind para arquivo padrão
-    # Para embeddings, usar embedding_dim se fornecido, caso contrário dim32
-    if kind in ['ae_features', 'ae_topics'] and embedding_dim is not None:
-        # Construir path dinâmico baseado em embedding_dim
+    # Para representações binárias, usar caminhos fixos
+    if kind in ['bin_features', 'bin_topics']:
         default_paths = {
             'bin_features': output_path / 'canonical_features.parquet',
-            'bin_topics': output_path / 'canonical_topics.parquet',
-            'ae_features': output_path / 'embeddings' / f'ae_features_dim{embedding_dim}.parquet',
-            'ae_topics': output_path / 'embeddings' / f'ae_topics_dim{embedding_dim}.parquet'
+            'bin_topics': output_path / 'canonical_topics.parquet'
         }
-    else:
-        # Usar padrão dim32
-        default_paths = {
-            'bin_features': output_path / 'canonical_features.parquet',
-            'bin_topics': output_path / 'canonical_topics.parquet',
-            'ae_features': output_path / 'embeddings' / 'ae_features_dim32.parquet',
-            'ae_topics': output_path / 'embeddings' / 'ae_topics_dim32.parquet'
-        }
+        file_path = data_path if data_path else default_paths[kind]
+        
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Arquivo de representação não encontrado: {file_path}\n"
+                f"Certifique-se de que o pipeline gerou '{file_path.name}'"
+            )
+        
+        return _load_binary_representation(file_path, kind)
     
-    if kind not in default_paths:
+    # Para embeddings, buscar por (d, seed) usando find_cached_embedding
+    elif kind in ['ae_features', 'ae_topics']:
+        # Se data_path explícito foi fornecido, usar diretamente
+        if data_path:
+            file_path = data_path
+            if not file_path.exists():
+                raise FileNotFoundError(
+                    f"Arquivo de embedding não encontrado: {file_path}"
+                )
+            return _load_embedding_representation(file_path, kind)
+        
+        # Caso contrário, buscar por (d, seed)
+        # Se seed não foi fornecida, tentar buscar qualquer embedding com d
+        from ..embeddings.cache_utils import find_cached_embedding
+        
+        # Usar embedding_dim se fornecido, caso contrário 32
+        d = embedding_dim if embedding_dim is not None else 32
+        
+        # Se seed fornecida, buscar exatamente
+        if seed is not None:
+            parquet_path, json_path = find_cached_embedding(
+                base_dir=output_path,
+                representation_type=kind,
+                d=d,
+                seed=seed
+            )
+            
+            if parquet_path and parquet_path.exists():
+                return _load_embedding_representation(parquet_path, kind)
+            else:
+                raise FileNotFoundError(
+                    f"Embedding não encontrado: {kind} com d={d}, seed={seed}\n"
+                    f"Execute o treinamento primeiro com: python -m src.embeddings.train_embeddings "
+                    f"--embedding-dim {d} --seed {seed}"
+                )
+        else:
+            # Seed não fornecida: buscar qualquer embedding com d (fallback para compatibilidade)
+            # Buscar padrão: {kind}_d{d}_seed*_*.parquet
+            embeddings_dir = output_path / "embeddings"
+            if embeddings_dir.exists():
+                pattern = f"{kind}_d{d}_seed*.parquet"
+                matches = sorted(embeddings_dir.glob(pattern))
+                
+                if matches:
+                    # Usar primeiro match encontrado (mais antigo)
+                    parquet_path = matches[0]
+                    print(f"[AVISO] Seed não especificada. Usando: {parquet_path.name}")
+                    return _load_embedding_representation(parquet_path, kind)
+            
+            # Fallback antigo: buscar arquivo sem seed (compatibilidade)
+            old_path = output_path / 'embeddings' / f'{kind}_dim{d}.parquet'
+            if old_path.exists():
+                print(f"[AVISO] Usando arquivo legado sem seed: {old_path.name}")
+                return _load_embedding_representation(old_path, kind)
+            
+            raise FileNotFoundError(
+                f"Nenhum embedding encontrado para {kind} com d={d}\n"
+                f"Execute o treinamento primeiro com: python -m src.embeddings.train_embeddings "
+                f"--embedding-dim {d} --seed <SEED>"
+            )
+    
+    else:
         raise ValueError(
             f"Tipo de representação desconhecido: '{kind}'. "
-            f"Tipos válidos: {list(default_paths.keys())}"
+            f"Tipos válidos: ['bin_features', 'bin_topics', 'ae_features', 'ae_topics']"
         )
-    
-    # Determinar caminho do arquivo
-    file_path = data_path if data_path else default_paths[kind]
-    
-    if not file_path.exists():
-        raise FileNotFoundError(
-            f"Arquivo de representação não encontrado: {file_path}\n"
-            f"Certifique-se de que o pipeline gerou '{file_path.name}'"
-        )
-    
-    # Carregar de acordo com o tipo
-    if kind in ['bin_features', 'bin_topics']:
-        return _load_binary_representation(file_path, kind)
-    elif kind in ['ae_features', 'ae_topics']:
-        return _load_embedding_representation(file_path, kind)
-    else:
-        raise ValueError(f"Tipo não implementado: {kind}")
 
 
 def _load_binary_representation(file_path: Path, kind: str) -> ItemRepresentation:

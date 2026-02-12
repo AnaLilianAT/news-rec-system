@@ -1,0 +1,22 @@
+{
+  "cache_key": "d23_seed1631363395_0e5811c4_8e2ecdf4",
+  "representation_type": "ae_features",
+  "embedding_dim": 23,
+  "seed": 1631363395,
+  "ae_config": {
+    "hidden_dim": null,
+    "dropout_rate": 0.2,
+    "epochs": 100,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "pos_weight_mode": "auto",
+    "denoising_prob": 0.0
+  },
+  "data_hash": "8e2ecdf4f02d84980887dee237f1672d",
+  "shape": [
+    1938,
+    23
+  ],
+  "created_at": "2026-02-12T14:35:48.539406",
+  "item_ids_hash": "35d47105"
+}

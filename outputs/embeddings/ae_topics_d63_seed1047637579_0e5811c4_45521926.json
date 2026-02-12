@@ -1,0 +1,22 @@
+{
+  "cache_key": "d63_seed1047637579_0e5811c4_45521926",
+  "representation_type": "ae_topics",
+  "embedding_dim": 63,
+  "seed": 1047637579,
+  "ae_config": {
+    "hidden_dim": null,
+    "dropout_rate": 0.2,
+    "epochs": 100,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "pos_weight_mode": "auto",
+    "denoising_prob": 0.0
+  },
+  "data_hash": "45521926ec462d7a31fb21dc2681fe0d",
+  "shape": [
+    1938,
+    63
+  ],
+  "created_at": "2026-02-12T16:24:12.740302",
+  "item_ids_hash": "35d47105"
+}

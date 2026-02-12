@@ -1,0 +1,32 @@
+{
+  "master_seed": 20260211,
+  "n_seeds": 20,
+  "seeds": [
+    358056291,
+    1576296115,
+    1631363395,
+    169153558,
+    690066093,
+    1098655442,
+    633259162,
+    2047321531,
+    527024918,
+    1317587706,
+    1036723065,
+    423235947,
+    677482947,
+    1492746576,
+    239209755,
+    637016530,
+    835817041,
+    719958201,
+    2004394224,
+    1047637579
+  ],
+  "info": {
+    "description": "Seeds fixas para experimentos de reprodutibilidade",
+    "generation_method": "numpy.random.default_rng() with choice(replace=False)",
+    "range": "[0, 2**31-1)",
+    "uniqueness": "guaranteed"
+  }
+}

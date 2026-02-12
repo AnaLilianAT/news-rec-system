@@ -21,7 +21,8 @@ def load_input_data(
     output_dir: Path = Path('outputs'),
     feature_representation: str = 'bin_features',
     topic_representation: str = 'bin_topics',
-    embedding_dim: Optional[int] = None
+    embedding_dim: Optional[int] = None,
+    seed: Optional[int] = None
 ):
     """
     Carrega dados de entrada necessários para gerar as listas.
@@ -31,6 +32,7 @@ def load_input_data(
         feature_representation: Tipo de representação de features ('bin_features' ou 'ae_features')
         topic_representation: Tipo de representação de tópicos ('bin_topics' ou 'ae_topics')
         embedding_dim: Dimensão dos embeddings (apenas para ae_features/ae_topics)
+        seed: Seed do embedding (apenas para ae_features/ae_topics)
     
     Returns:
         Tupla (predictions_df, features_df, topics_df, users_df)
@@ -47,7 +49,8 @@ def load_input_data(
     features_rep = get_item_representation(
         feature_representation, 
         output_dir=str(output_dir),
-        embedding_dim=embedding_dim
+        embedding_dim=embedding_dim,
+        seed=seed
     )
     features_df = features_rep.matrix
     print(f"Features: {len(features_df):,} notícias, {len(features_rep.feature_names)} dimensões")
@@ -57,7 +60,8 @@ def load_input_data(
     topics_rep = get_item_representation(
         topic_representation, 
         output_dir=str(output_dir),
-        embedding_dim=embedding_dim
+        embedding_dim=embedding_dim,
+        seed=seed
     )
     topics_df = topics_rep.matrix
     print(f"Tópicos: {len(topics_df):,} notícias, {len(topics_rep.feature_names)} dimensões")
@@ -351,6 +355,12 @@ def main():
         default=None,
         help='Dimensão dos embeddings para representações ae_* (default: None = usa dim32)'
     )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=None,
+        help='Seed do embedding para representações ae_* (default: None = usa primeiro encontrado)'
+    )
     
     args = parser.parse_args()
     
@@ -406,7 +416,8 @@ def main():
             output_dir=Path(args.output_dir),
             feature_representation=feat_rep,
             topic_representation=topic_rep,
-            embedding_dim=getattr(args, 'embedding_dim', None)
+            embedding_dim=getattr(args, 'embedding_dim', None),
+            seed=getattr(args, 'seed', None)
         )
         
         # Preparar vetores

@@ -16,6 +16,13 @@ from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 
 from .autoencoder import train_autoencoder, extract_embeddings
+from .cache_utils import (
+    make_embedding_cache_key,
+    get_embedding_paths,
+    build_cache_metadata,
+    validate_cache_metadata,
+    compute_item_ids_hash
+)
 from ..representations.item_representation import get_item_representation
 from ..config import AUTOENCODER_CONFIG
 
@@ -53,73 +60,33 @@ def compute_data_hash(X: np.ndarray) -> str:
     return hashlib.md5(data_bytes).hexdigest()
 
 
-def get_cache_metadata(
-    embedding_dim: int,
+def get_ae_config_dict(
     hidden_dim: Optional[int],
     dropout_rate: float,
     epochs: int,
     batch_size: int,
     learning_rate: float,
-    seed: int,
-    data_hash: str,
-    representation_type: str,
     pos_weight_mode: str = 'auto',
     denoising_prob: float = 0.0
 ) -> Dict[str, Any]:
     """
-    Cria dicionário de metadados para cache.
+    Extrai apenas a configuração do AE (sem d e seed que são explícitos).
     
     Returns:
-        Dicionário com config e hash dos dados
+        Dicionário com config do autoencoder
     """
     return {
-        'representation_type': representation_type,
-        'embedding_dim': embedding_dim,
         'hidden_dim': hidden_dim,
         'dropout_rate': dropout_rate,
         'epochs': epochs,
         'batch_size': batch_size,
         'learning_rate': learning_rate,
-        'seed': seed,
-        'data_hash': data_hash,
         'pos_weight_mode': pos_weight_mode,
         'denoising_prob': denoising_prob
     }
 
 
-def check_cache_valid(
-    cache_json_path: Path,
-    current_metadata: Dict[str, Any]
-) -> bool:
-    """
-    Verifica se cache existente é válido (mesma config + data_hash).
-    
-    Args:
-        cache_json_path: Caminho para arquivo JSON de metadados
-        current_metadata: Metadados atuais para comparar
-    
-    Returns:
-        True se cache é válido
-    """
-    if not cache_json_path.exists():
-        return False
-    
-    try:
-        with open(cache_json_path, 'r') as f:
-            cached_metadata = json.load(f)
-        
-        # Comparar todos os campos relevantes
-        for key in ['embedding_dim', 'hidden_dim', 'dropout_rate', 'epochs',
-                    'batch_size', 'learning_rate', 'seed', 'data_hash',
-                    'pos_weight_mode', 'denoising_prob']:
-            if cached_metadata.get(key) != current_metadata.get(key):
-                return False
-        
-        return True
-    
-    except Exception as e:
-        print(f"Erro ao ler cache: {e}")
-        return False
+# Função check_cache_valid removida - usando validate_cache_metadata do cache_utils
 
 
 def save_embeddings_with_metadata(
@@ -135,7 +102,7 @@ def save_embeddings_with_metadata(
     Args:
         embeddings: Matriz (n_items, embedding_dim)
         item_ids: Array com news_id
-        metadata: Dicionário de metadados
+        metadata: Dicionário de metadados (já construído com build_cache_metadata)
         output_path: Caminho para parquet
         json_path: Caminho para JSON
     """
@@ -155,6 +122,8 @@ def save_embeddings_with_metadata(
     print(f"Embeddings salvos: {output_path}")
     print(f"  - Shape: {embeddings.shape}")
     print(f"  - Tamanho: {output_path.stat().st_size / 1024:.1f} KB")
+    print(f"  - Seed: {metadata.get('seed')}")
+    print(f"  - Cache key: {metadata.get('cache_key')}")
     
     # Salvar metadados
     with open(json_path, 'w') as f:
@@ -267,14 +236,17 @@ def train_and_export_embeddings(
         print(f"Cache: {'Desabilitado (--force)' if force_retrain else 'Habilitado'}")
     
     data_path = Path(data_dir)
-    embeddings_dir = data_path / "embeddings"
-    embeddings_dir.mkdir(parents=True, exist_ok=True)
     
-    # Definir caminhos de saída
-    features_output = embeddings_dir / f"ae_features_dim{embedding_dim}.parquet"
-    features_json = embeddings_dir / f"ae_features_dim{embedding_dim}.json"
-    topics_output = embeddings_dir / f"ae_topics_dim{embedding_dim}.parquet"
-    topics_json = embeddings_dir / f"ae_topics_dim{embedding_dim}.json"
+    # Construir dicionário de config do AE (sem d e seed)
+    ae_config = get_ae_config_dict(
+        hidden_dim=hidden_dim,
+        dropout_rate=dropout_rate,
+        epochs=epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        pos_weight_mode=pos_weight_mode,
+        denoising_prob=denoising_prob
+    )
     
     # ========================
     # FEATURES
@@ -292,34 +264,50 @@ def train_and_export_embeddings(
     X_features = repr_features.matrix[repr_features.feature_names].values
     item_ids_features = repr_features.matrix['news_id'].values
     
-    # Calcular hash e metadados
+    # Calcular hashes
     data_hash_features = compute_data_hash(X_features)
-    metadata_features = get_cache_metadata(
-        embedding_dim=embedding_dim,
-        hidden_dim=hidden_dim,
-        dropout_rate=dropout_rate,
-        epochs=epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
+    item_ids_hash_features = compute_item_ids_hash(item_ids_features)
+    
+    # Gerar cache key e paths
+    cache_key_features = make_embedding_cache_key(
+        d=embedding_dim,
         seed=seed,
-        data_hash=data_hash_features,
+        ae_config=ae_config,
+        datahash=data_hash_features
+    )
+    features_output, features_json = get_embedding_paths(
+        base_dir=data_path,
         representation_type='ae_features',
-        pos_weight_mode=pos_weight_mode,
-        denoising_prob=denoising_prob
+        cache_key=cache_key_features
     )
     
     # Verificar cache
-    cache_valid_features = check_cache_valid(features_json, metadata_features)
+    cache_valid_features = False
+    if features_json.exists():
+        try:
+            with open(features_json, 'r') as f:
+                cached_metadata = json.load(f)
+            cache_valid_features = validate_cache_metadata(
+                cached_metadata,
+                expected_d=embedding_dim,
+                expected_seed=seed,
+                expected_ae_config=ae_config,
+                expected_datahash=data_hash_features
+            )
+        except Exception:
+            cache_valid_features = False
     
     if cache_valid_features and not force_retrain:
         if verbose:
             print("\n[OK] Cache válido encontrado. Reutilizando embeddings existentes.")
             print(f"  Arquivo: {features_output}")
+            print(f"  Cache key: {cache_key_features}")
     else:
         if force_retrain and verbose:
             print("\n[INFO] --force especificado. Retreinando modelo...")
         elif verbose:
             print("\n[INFO] Cache inválido ou inexistente. Treinando novo modelo...")
+            print(f"  Cache key: {cache_key_features}")
         
         # Treinar autoencoder
         model_features = train_autoencoder(
@@ -339,6 +327,18 @@ def train_and_export_embeddings(
             model=model_features,
             X=X_features,
             normalize_l2=True
+        )
+        
+        # Construir metadados completos
+        metadata_features = build_cache_metadata(
+            d=embedding_dim,
+            seed=seed,
+            ae_config=ae_config,
+            datahash=data_hash_features,
+            representation_type='ae_features',
+            cache_key=cache_key_features,
+            shape=Z_features.shape,
+            item_ids_hash=item_ids_hash_features
         )
         
         # Salvar com metadados
@@ -366,34 +366,50 @@ def train_and_export_embeddings(
     X_topics = repr_topics.matrix[repr_topics.feature_names].values
     item_ids_topics = repr_topics.matrix['news_id'].values
     
-    # Calcular hash e metadados
+    # Calcular hashes
     data_hash_topics = compute_data_hash(X_topics)
-    metadata_topics = get_cache_metadata(
-        embedding_dim=embedding_dim,
-        hidden_dim=hidden_dim,
-        dropout_rate=dropout_rate,
-        epochs=epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
+    item_ids_hash_topics = compute_item_ids_hash(item_ids_topics)
+    
+    # Gerar cache key e paths
+    cache_key_topics = make_embedding_cache_key(
+        d=embedding_dim,
         seed=seed,
-        data_hash=data_hash_topics,
+        ae_config=ae_config,
+        datahash=data_hash_topics
+    )
+    topics_output, topics_json = get_embedding_paths(
+        base_dir=data_path,
         representation_type='ae_topics',
-        pos_weight_mode=pos_weight_mode,
-        denoising_prob=denoising_prob
+        cache_key=cache_key_topics
     )
     
     # Verificar cache
-    cache_valid_topics = check_cache_valid(topics_json, metadata_topics)
+    cache_valid_topics = False
+    if topics_json.exists():
+        try:
+            with open(topics_json, 'r') as f:
+                cached_metadata = json.load(f)
+            cache_valid_topics = validate_cache_metadata(
+                cached_metadata,
+                expected_d=embedding_dim,
+                expected_seed=seed,
+                expected_ae_config=ae_config,
+                expected_datahash=data_hash_topics
+            )
+        except Exception:
+            cache_valid_topics = False
     
     if cache_valid_topics and not force_retrain:
         if verbose:
             print("\n[OK] Cache válido encontrado. Reutilizando embeddings existentes.")
             print(f"  Arquivo: {topics_output}")
+            print(f"  Cache key: {cache_key_topics}")
     else:
         if force_retrain and verbose:
             print("\n[INFO] --force especificado. Retreinando modelo...")
         elif verbose:
             print("\n[INFO] Cache inválido ou inexistente. Treinando novo modelo...")
+            print(f"  Cache key: {cache_key_topics}")
         
         # Treinar autoencoder
         model_topics = train_autoencoder(
@@ -413,6 +429,18 @@ def train_and_export_embeddings(
             model=model_topics,
             X=X_topics,
             normalize_l2=True
+        )
+        
+        # Construir metadados completos
+        metadata_topics = build_cache_metadata(
+            d=embedding_dim,
+            seed=seed,
+            ae_config=ae_config,
+            datahash=data_hash_topics,
+            representation_type='ae_topics',
+            cache_key=cache_key_topics,
+            shape=Z_topics.shape,
+            item_ids_hash=item_ids_hash_topics
         )
         
         # Salvar com metadados
