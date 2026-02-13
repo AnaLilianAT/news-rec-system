@@ -24,7 +24,7 @@ def sanitize_filename(name: str) -> str:
     return name.replace(' ', '_').replace('/', '_').replace('\\', '_')
 
 
-def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None):
+def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_avg=None, gh_avg=None):
     """
     Plota resultados de um algoritmo com dois eixos Y.
     
@@ -33,6 +33,8 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None):
         algorithm: Nome do algoritmo
         band_type: 'ci95', 'std', ou 'none'
         output_path: Path para salvar PNG
+        rmse_avg: Média geral do RMSE para linha tracejada (opcional)
+        gh_avg: Média geral do GH para linha tracejada (opcional)
     """
     # Ordenar por dimensao
     df_algo = df_algo.sort_values('d')
@@ -54,6 +56,11 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None):
                      color=color_rmse, marker='o', linewidth=2, 
                      markersize=6, label='RMSE')
     
+    # Linha tracejada RMSE média (se fornecida)
+    if rmse_avg is not None:
+        ax1.axhline(y=rmse_avg, color=color_rmse, linestyle='--', 
+                    linewidth=2, alpha=0.7, label='RMSE Média')
+    
     # Banda RMSE
     if band_type == 'ci95' and 'rmse_ci95_low' in df_algo.columns:
         ax1.fill_between(df_algo['d'], 
@@ -74,7 +81,12 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None):
     # Linha principal GH
     line2 = ax2.plot(df_algo['d'], df_algo['gh_mean'], 
                      color=color_gh, marker='s', linewidth=2, 
-                     markersize=6, linestyle='--', label='GH')
+                     markersize=6, label='GH')
+    
+    # Linha tracejada GH média (se fornecida)
+    if gh_avg is not None:
+        ax2.axhline(y=gh_avg, color=color_gh, linestyle='--', 
+                    linewidth=2, alpha=0.7, label='GH Média')
     
     # Banda GH
     if band_type == 'ci95' and 'gh_ci95_low' in df_algo.columns:
@@ -94,17 +106,16 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None):
         title += f' (banda: {band_type.upper()})'
     plt.title(title, fontsize=14, fontweight='bold', pad=20)
     
-    # Combinar legendas dos dois eixos
-    lines = line1 + line2
-    labels = [l.get_label() for l in lines]
+    # Coletar todos os handles e labels dos dois eixos
+    handles1, labels1 = ax1.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
     
-    # Adicionar bandas na legenda se existirem
-    if band_type == 'ci95':
-        labels.extend(['RMSE IC95', 'GH IC95'])
-    elif band_type == 'std':
-        labels.extend(['RMSE +/- std', 'GH +/- std'])
+    # Combinar sem duplicatas
+    all_handles = handles1 + handles2
+    all_labels = labels1 + labels2
     
-    ax1.legend(lines, labels, loc='upper left', framealpha=0.9)
+    # Criar legenda com todos os elementos
+    ax1.legend(all_handles, all_labels, loc='upper left', framealpha=0.9)
     
     # Grid e layout
     ax1.grid(True, alpha=0.3, linestyle=':', linewidth=0.5)
@@ -160,6 +171,20 @@ def main():
         help='Mostrar plots ao inves de salvar'
     )
     
+    parser.add_argument(
+        '--rmse-table',
+        type=str,
+        default='outputs/tabela_6_3_RMSE_bin_features+bin_topics.csv',
+        help='Path da tabela CSV com médias de RMSE por algoritmo'
+    )
+    
+    parser.add_argument(
+        '--gh-table',
+        type=str,
+        default='outputs/tabela_6_6_GH_listas_bin_features+bin_topics.csv',
+        help='Path da tabela CSV com médias de GH por algoritmo'
+    )
+    
     args = parser.parse_args()
     
     # Validar input
@@ -167,6 +192,34 @@ def main():
     if not input_path.exists():
         print(f"[X] Erro: Arquivo nao encontrado: {input_path}")
         return 1
+    
+    # Carregar tabelas de médias
+    rmse_averages = {}
+    gh_averages = {}
+    
+    rmse_table_path = Path(args.rmse_table)
+    if rmse_table_path.exists():
+        print(f"[>] Carregando médias de RMSE: {rmse_table_path}")
+        df_rmse = pd.read_csv(rmse_table_path)
+        # Mapear algoritmo -> média
+        for _, row in df_rmse.iterrows():
+            algo = row['Algoritmo'].strip().lower()
+            rmse_averages[algo] = row['Média']
+        print(f"[OK] {len(rmse_averages)} médias de RMSE carregadas")
+    else:
+        print(f"[!] Aviso: Tabela de RMSE não encontrada: {rmse_table_path}")
+    
+    gh_table_path = Path(args.gh_table)
+    if gh_table_path.exists():
+        print(f"[>] Carregando médias de GH: {gh_table_path}")
+        df_gh = pd.read_csv(gh_table_path)
+        # Mapear algoritmo -> média
+        for _, row in df_gh.iterrows():
+            algo = row['Algoritmo'].strip().lower()
+            gh_averages[algo] = row['Média']
+        print(f"[OK] {len(gh_averages)} médias de GH carregadas")
+    else:
+        print(f"[!] Aviso: Tabela de GH não encontrada: {gh_table_path}")
     
     # Carregar dados
     print("="*70)
@@ -201,6 +254,16 @@ def main():
         
         print(f"\n[{i}/{len(algorithms)}] {algorithm}: {len(df_algo)} pontos")
         
+        # Buscar médias do algoritmo
+        algo_key = algorithm.strip().lower()
+        rmse_avg = rmse_averages.get(algo_key, None)
+        gh_avg = gh_averages.get(algo_key, None)
+        
+        if rmse_avg is not None:
+            print(f"  -> RMSE média: {rmse_avg:.3f}")
+        if gh_avg is not None:
+            print(f"  -> GH média: {gh_avg:.3f}")
+        
         if args.show:
             output_path = None
         else:
@@ -208,7 +271,7 @@ def main():
             output_path = output_dir / filename
         
         try:
-            plot_algorithm(df_algo, algorithm, args.band, output_path)
+            plot_algorithm(df_algo, algorithm, args.band, output_path, rmse_avg, gh_avg)
         except Exception as e:
             print(f"[X] Erro ao plotar {algorithm}: {e}")
             continue
