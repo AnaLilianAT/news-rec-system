@@ -1,0 +1,63 @@
+{
+  "cache_key": "d65_seed358056291_bc4a65e9_8e2ecdf4",
+  "representation_type": "ae_features",
+  "embedding_dim": 65,
+  "seed": 358056291,
+  "ae_config": {
+    "hidden_dim": 64,
+    "dropout_rate": 0.1,
+    "epochs": 200,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "pos_weight_mode": "auto",
+    "denoising_prob": 0.1,
+    "weight_decay": 1e-05,
+    "early_stopping_patience": 10,
+    "pos_weight_clip": [
+      1.0,
+      10.0
+    ],
+    "include_continuous": false,
+    "continuous_cols": [
+      "polaridade",
+      "subjetividade"
+    ],
+    "concat_continuous_after": true,
+    "l2_normalize": true
+  },
+  "data_hash": "8e2ecdf4f02d84980887dee237f1672d",
+  "shape": [
+    1938,
+    67
+  ],
+  "created_at": "2026-02-12T23:20:12.488455",
+  "item_ids_hash": "35d47105",
+  "training": {
+    "final_train_loss": 0.3368612848795377,
+    "final_val_loss": 0.320148266851902,
+    "best_val_loss": 0.320148266851902,
+    "total_epochs": 200,
+    "early_stopped": false,
+    "pos_weight_stats": {
+      "mean": 7.31465206753465,
+      "median": 9.130718953651586,
+      "min": 1.0,
+      "max": 10.0,
+      "mode": "auto",
+      "clip": [
+        1.0,
+        10.0
+      ]
+    }
+  },
+  "continuous_features": {
+    "included_in_ae": false,
+    "concatenated_after": true,
+    "columns": [
+      "polaridade",
+      "subjetividade"
+    ],
+    "final_dim": 67
+  },
+  "export_timestamp": "2026-02-12T23:20:12.516203"
+}

@@ -14,22 +14,36 @@ RANDOM_SEED = 42
 # ============================================================================
 
 # Configurações centralizadas do autoencoder para reprodutibilidade
+# Otimizado para entrada binária esparsa (~85% zeros), N~2k itens
 AUTOENCODER_CONFIG = {
     # Arquitetura
     'embedding_dim': 32,           # Dimensão final do embedding (camada do meio)
-    'hidden_dim': None,            # Dimensão oculta opcional (None = 2x embedding_dim)
+    'hidden_dim': 64,              # Dimensão oculta (64 é adequado para D~81 esparso)
     
     # Treinamento
-    'epochs': 100,                 # Número de épocas de treinamento
-    'batch_size': 32,              # Tamanho do batch
+    'epochs': 200,                 # Número de épocas de treinamento
+    'batch_size': 128,             # Tamanho do batch (maior para dados esparsos)
     'learning_rate': 0.001,        # Taxa de aprendizado (Adam optimizer)
+    'weight_decay': 1e-5,          # Weight decay para regularização L2
     
     # Regularização
-    'dropout_rate': 0.2,           # Dropout entre camadas (0.0 a 0.5)
-    'denoising_prob': 0.0,         # Probabilidade de corrupção para denoising AE (0.0 = desabilitado)
+    'dropout_rate': 0.1,           # Dropout entre camadas (0.1 para evitar overfitting)
+    'denoising_prob': 0.1,         # Probabilidade de corrupção para denoising AE
+    
+    # Early stopping
+    'early_stopping_patience': 10, # Paciência para early stopping (0 = desabilitado)
     
     # Tratamento de desbalanceamento
     'pos_weight_mode': 'auto',     # 'auto', 'sqrt', ou valor float (ex: 2.0)
+    'pos_weight_clip': [1.0, 10.0],# Clipping de pos_weight [min, max]
+    
+    # Tratamento de features contínuas
+    'include_continuous': False,   # Se True, inclui features contínuas no treino
+    'continuous_cols': ['polaridade', 'subjetividade'],  # Colunas contínuas
+    'concat_continuous_after': True,  # Se True, concatena após embedding
+    
+    # Pós-processamento
+    'l2_normalize': True,          # Normalizar embeddings (L2) após extração
     
     # Reprodutibilidade
     'seed': RANDOM_SEED,           # Seed para torch, numpy e random

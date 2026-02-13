@@ -15,7 +15,7 @@ import torch
 from pathlib import Path
 from typing import Tuple, Dict, Any, Optional
 
-from .autoencoder import train_autoencoder, extract_embeddings
+from .autoencoder import train_autoencoder, extract_embeddings, extract_embeddings_with_continuous
 from .cache_utils import (
     make_embedding_cache_key,
     get_embedding_paths,
@@ -67,7 +67,14 @@ def get_ae_config_dict(
     batch_size: int,
     learning_rate: float,
     pos_weight_mode: str = 'auto',
-    denoising_prob: float = 0.0
+    denoising_prob: float = 0.0,
+    weight_decay: float = 1e-5,
+    early_stopping_patience: int = 0,
+    pos_weight_clip: list = None,
+    include_continuous: bool = False,
+    continuous_cols: list = None,
+    concat_continuous_after: bool = True,
+    l2_normalize: bool = True
 ) -> Dict[str, Any]:
     """
     Extrai apenas a configuração do AE (sem d e seed que são explícitos).
@@ -82,7 +89,14 @@ def get_ae_config_dict(
         'batch_size': batch_size,
         'learning_rate': learning_rate,
         'pos_weight_mode': pos_weight_mode,
-        'denoising_prob': denoising_prob
+        'denoising_prob': denoising_prob,
+        'weight_decay': weight_decay,
+        'early_stopping_patience': early_stopping_patience,
+        'pos_weight_clip': pos_weight_clip or [1.0, 10.0],
+        'include_continuous': include_continuous,
+        'continuous_cols': continuous_cols or ['polaridade', 'subjetividade'],
+        'concat_continuous_after': concat_continuous_after,
+        'l2_normalize': l2_normalize
     }
 
 
@@ -94,7 +108,8 @@ def save_embeddings_with_metadata(
     item_ids: np.ndarray,
     metadata: Dict[str, Any],
     output_path: Path,
-    json_path: Path
+    json_path: Path,
+    verbose: bool = True
 ):
     """
     Salva embeddings em parquet + metadados em JSON.
@@ -125,10 +140,18 @@ def save_embeddings_with_metadata(
     print(f"  - Seed: {metadata.get('seed')}")
     print(f"  - Cache key: {metadata.get('cache_key')}")
     
-    # Salvar metadados
+    # Salvar metadados (com timestamp)
+    import datetime
+    metadata['export_timestamp'] = datetime.datetime.now().isoformat()
+    
     with open(json_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     print(f"Metadados salvos: {json_path}")
+    
+    # Log de verificação L2
+    if verbose and embeddings.shape[0] > 0:
+        norms = np.linalg.norm(embeddings, axis=1)
+        print(f"  L2 norms: mean={norms.mean():.4f}, std={norms.std():.4f}, min={norms.min():.4f}, max={norms.max():.4f}")
 
 
 def load_embedding_cache(
@@ -178,6 +201,13 @@ def train_and_export_embeddings(
     seed: int = None,
     pos_weight_mode: str = None,
     denoising_prob: float = None,
+    weight_decay: float = None,
+    early_stopping_patience: int = None,
+    pos_weight_clip: list = None,
+    include_continuous: bool = None,
+    continuous_cols: list = None,
+    concat_continuous_after: bool = None,
+    l2_normalize: bool = None,
     force_retrain: bool = False,
     verbose: bool = True
 ) -> Tuple[Path, Path]:
@@ -216,6 +246,13 @@ def train_and_export_embeddings(
     seed = seed if seed is not None else cfg['seed']
     pos_weight_mode = pos_weight_mode if pos_weight_mode is not None else cfg['pos_weight_mode']
     denoising_prob = denoising_prob if denoising_prob is not None else cfg['denoising_prob']
+    weight_decay = weight_decay if weight_decay is not None else cfg.get('weight_decay', 1e-5)
+    early_stopping_patience = early_stopping_patience if early_stopping_patience is not None else cfg.get('early_stopping_patience', 0)
+    pos_weight_clip = pos_weight_clip if pos_weight_clip is not None else cfg.get('pos_weight_clip', [1.0, 10.0])
+    include_continuous = include_continuous if include_continuous is not None else cfg.get('include_continuous', False)
+    continuous_cols = continuous_cols if continuous_cols is not None else cfg.get('continuous_cols', ['polaridade', 'subjetividade'])
+    concat_continuous_after = concat_continuous_after if concat_continuous_after is not None else cfg.get('concat_continuous_after', True)
+    l2_normalize = l2_normalize if l2_normalize is not None else cfg.get('l2_normalize', True)
     
     # Fixar seeds para reprodutibilidade
     set_seeds(seed)
@@ -230,9 +267,17 @@ def train_and_export_embeddings(
         print(f"Epochs: {epochs}")
         print(f"Batch size: {batch_size}")
         print(f"Learning rate: {learning_rate}")
+        print(f"Weight decay: {weight_decay}")
+        print(f"Early stopping patience: {early_stopping_patience}")
         print(f"Seed: {seed}")
         print(f"Pos weight mode: {pos_weight_mode}")
+        print(f"Pos weight clip: {pos_weight_clip}")
         print(f"Denoising prob: {denoising_prob}")
+        print(f"Include continuous: {include_continuous}")
+        if include_continuous:
+            print(f"Continuous cols: {continuous_cols}")
+            print(f"Concat after: {concat_continuous_after}")
+        print(f"L2 normalize: {l2_normalize}")
         print(f"Cache: {'Desabilitado (--force)' if force_retrain else 'Habilitado'}")
     
     data_path = Path(data_dir)
@@ -245,7 +290,14 @@ def train_and_export_embeddings(
         batch_size=batch_size,
         learning_rate=learning_rate,
         pos_weight_mode=pos_weight_mode,
-        denoising_prob=denoising_prob
+        denoising_prob=denoising_prob,
+        weight_decay=weight_decay,
+        early_stopping_patience=early_stopping_patience,
+        pos_weight_clip=pos_weight_clip,
+        include_continuous=include_continuous,
+        continuous_cols=continuous_cols,
+        concat_continuous_after=concat_continuous_after,
+        l2_normalize=l2_normalize
     )
     
     # ========================
@@ -310,26 +362,61 @@ def train_and_export_embeddings(
             print(f"  Cache key: {cache_key_features}")
         
         # Treinar autoencoder
-        model_features = train_autoencoder(
+        model_features, train_metadata_features = train_autoencoder(
             X=X_features,
             embedding_dim=embedding_dim,
             hidden_dim=hidden_dim,
             dropout_rate=dropout_rate,
+            pos_weight_mode=pos_weight_mode,
+            pos_weight_clip=pos_weight_clip,
+            denoising_prob=denoising_prob,
             epochs=epochs,
             batch_size=batch_size,
             learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            early_stopping_patience=early_stopping_patience,
+            val_split=0.2,  # Split treino/val padrão
             seed=seed,
             verbose=verbose
         )
         
-        # Extrair embeddings (com L2 normalization)
-        Z_features = extract_embeddings(
-            model=model_features,
-            X=X_features,
-            normalize_l2=True
-        )
+        # Extrair embeddings (com L2 normalization baseado na config)
+        # Se concat_continuous_after=True, concatenar polaridade/subjetividade
+        if concat_continuous_after and not include_continuous:
+            if verbose:
+                print(f"\n[INFO] Concatenando features contínuas após embedding...")
+            
+            # Carregar features contínuas do dataset completo
+            # Assumindo que repr_features.matrix contém todas as colunas
+            X_continuous = None
+            if all(col in repr_features.matrix.columns for col in continuous_cols):
+                X_continuous = repr_features.matrix[continuous_cols].values
+                if verbose:
+                    print(f"  Colunas contínuas: {continuous_cols}")
+                    print(f"  Shape contínuas: {X_continuous.shape}")
+            else:
+                if verbose:
+                    print(f"  [WARNING] Colunas {continuous_cols} não encontradas. Continuando sem concatenação.")
+            
+            Z_features = extract_embeddings_with_continuous(
+                model=model_features,
+                X_binary=X_features,
+                X_continuous=X_continuous,
+                normalize_l2=l2_normalize,
+                concat_continuous_after=True
+            )
+            
+            if verbose and X_continuous is not None:
+                print(f"  Shape final (AE + continuous): {Z_features.shape}")
+        else:
+            # Extração padrão sem concatenação
+            Z_features = extract_embeddings(
+                model=model_features,
+                X=X_features,
+                normalize_l2=l2_normalize
+            )
         
-        # Construir metadados completos
+        # Construir metadados completos (incluindo metadados de treino)
         metadata_features = build_cache_metadata(
             d=embedding_dim,
             seed=seed,
@@ -340,6 +427,16 @@ def train_and_export_embeddings(
             shape=Z_features.shape,
             item_ids_hash=item_ids_hash_features
         )
+        # Adicionar metadados de treino
+        metadata_features['training'] = train_metadata_features
+        
+        # Adicionar info sobre features contínuas
+        metadata_features['continuous_features'] = {
+            'included_in_ae': include_continuous,
+            'concatenated_after': concat_continuous_after and not include_continuous,
+            'columns': continuous_cols if (concat_continuous_after and not include_continuous) else [],
+            'final_dim': Z_features.shape[1]
+        }
         
         # Salvar com metadados
         save_embeddings_with_metadata(
@@ -347,7 +444,8 @@ def train_and_export_embeddings(
             item_ids=item_ids_features,
             metadata=metadata_features,
             output_path=features_output,
-            json_path=features_json
+            json_path=features_json,
+            verbose=verbose
         )
     
     # ========================
@@ -412,26 +510,33 @@ def train_and_export_embeddings(
             print(f"  Cache key: {cache_key_topics}")
         
         # Treinar autoencoder
-        model_topics = train_autoencoder(
+        model_topics, train_metadata_topics = train_autoencoder(
             X=X_topics,
             embedding_dim=embedding_dim,
             hidden_dim=hidden_dim,
             dropout_rate=dropout_rate,
+            pos_weight_mode=pos_weight_mode,
+            pos_weight_clip=pos_weight_clip,
+            denoising_prob=denoising_prob,
             epochs=epochs,
             batch_size=batch_size,
             learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            early_stopping_patience=early_stopping_patience,
+            val_split=0.2,  # Split treino/val padrão
             seed=seed,
             verbose=verbose
         )
         
-        # Extrair embeddings (com L2 normalization)
+        # Extrair embeddings (com L2 normalization baseado na config)
+        # Tópicos são sempre binários, sem features contínuas
         Z_topics = extract_embeddings(
             model=model_topics,
             X=X_topics,
-            normalize_l2=True
+            normalize_l2=l2_normalize
         )
         
-        # Construir metadados completos
+        # Construir metadados completos (incluindo metadados de treino)
         metadata_topics = build_cache_metadata(
             d=embedding_dim,
             seed=seed,
@@ -442,6 +547,16 @@ def train_and_export_embeddings(
             shape=Z_topics.shape,
             item_ids_hash=item_ids_hash_topics
         )
+        # Adicionar metadados de treino
+        metadata_topics['training'] = train_metadata_topics
+        
+        # Adicionar info sobre features contínuas (para tópicos, sempre False)
+        metadata_topics['continuous_features'] = {
+            'included_in_ae': False,
+            'concatenated_after': False,
+            'columns': [],
+            'final_dim': Z_topics.shape[1]
+        }
         
         # Salvar com metadados
         save_embeddings_with_metadata(
@@ -449,7 +564,8 @@ def train_and_export_embeddings(
             item_ids=item_ids_topics,
             metadata=metadata_topics,
             output_path=topics_output,
-            json_path=topics_json
+            json_path=topics_json,
+            verbose=verbose
         )
     
     if verbose:
@@ -530,6 +646,23 @@ def main():
         help=f"Probabilidade de denoising (padrão config: {cfg['denoising_prob']})"
     )
     parser.add_argument(
+        '--weight-decay',
+        type=float,
+        default=None,
+        help=f"Weight decay para regularização L2 (padrão config: {cfg.get('weight_decay', 1e-5)})"
+    )
+    parser.add_argument(
+        '--early-stopping-patience',
+        type=int,
+        default=None,
+        help=f"Paciência para early stopping (padrão config: {cfg.get('early_stopping_patience', 0)})"
+    )
+    parser.add_argument(
+        '--no-l2-normalize',
+        action='store_true',
+        help='Desabilita normalização L2 dos embeddings (padrão: habilitado)'
+    )
+    parser.add_argument(
         '--force',
         action='store_true',
         help='Força retreinamento mesmo se cache válido existir'
@@ -548,6 +681,9 @@ def main():
         seed=args.seed,
         pos_weight_mode=args.pos_weight_mode,
         denoising_prob=args.denoising_prob,
+        weight_decay=args.weight_decay,
+        early_stopping_patience=args.early_stopping_patience,
+        l2_normalize=not args.no_l2_normalize if not args.no_l2_normalize else None,
         force_retrain=args.force,
         verbose=True
     )

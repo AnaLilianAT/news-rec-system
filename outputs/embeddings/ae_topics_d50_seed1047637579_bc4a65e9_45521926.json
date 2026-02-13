@@ -1,0 +1,60 @@
+{
+  "cache_key": "d50_seed1047637579_bc4a65e9_45521926",
+  "representation_type": "ae_topics",
+  "embedding_dim": 50,
+  "seed": 1047637579,
+  "ae_config": {
+    "hidden_dim": 64,
+    "dropout_rate": 0.1,
+    "epochs": 200,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "pos_weight_mode": "auto",
+    "denoising_prob": 0.1,
+    "weight_decay": 1e-05,
+    "early_stopping_patience": 10,
+    "pos_weight_clip": [
+      1.0,
+      10.0
+    ],
+    "include_continuous": false,
+    "continuous_cols": [
+      "polaridade",
+      "subjetividade"
+    ],
+    "concat_continuous_after": true,
+    "l2_normalize": true
+  },
+  "data_hash": "45521926ec462d7a31fb21dc2681fe0d",
+  "shape": [
+    1938,
+    50
+  ],
+  "created_at": "2026-02-12T22:59:45.453047",
+  "item_ids_hash": "35d47105",
+  "training": {
+    "final_train_loss": 0.28539330111100125,
+    "final_val_loss": 0.09003201499581337,
+    "best_val_loss": 0.08167714066803455,
+    "total_epochs": 140,
+    "early_stopped": true,
+    "pos_weight_stats": {
+      "mean": 6.5344945691823915,
+      "median": 6.26317984255786,
+      "min": 1.47999999997632,
+      "max": 10.0,
+      "mode": "auto",
+      "clip": [
+        1.0,
+        10.0
+      ]
+    }
+  },
+  "continuous_features": {
+    "included_in_ae": false,
+    "concatenated_after": false,
+    "columns": [],
+    "final_dim": 50
+  },
+  "export_timestamp": "2026-02-12T22:59:45.469842"
+}
