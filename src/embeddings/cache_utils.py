@@ -196,7 +196,7 @@ def find_cached_embedding(
     
     Args:
         base_dir: Diretório base
-        representation_type: 'ae_features' ou 'ae_topics'
+        representation_type: 'ae_features', 'ae_topics', 'svd_features', 'svd_topics'
         d: Dimensão do embedding
         seed: Seed do treinamento
     
@@ -207,9 +207,14 @@ def find_cached_embedding(
     if not embeddings_dir.exists():
         return None, None
     
-    # Padrão de busca: {type}_d{d}_seed{seed}_*.parquet
+    # Tentar primeiro o padrão com sufixo (autoencoder): {type}_d{d}_seed{seed}_*.parquet
     pattern = f"{representation_type}_d{d}_seed{seed}_*.parquet"
     matches = list(embeddings_dir.glob(pattern))
+    
+    # Se não encontrou, tentar padrão sem sufixo (SVD): {type}_d{d}_seed{seed}.parquet
+    if not matches:
+        pattern = f"{representation_type}_d{d}_seed{seed}.parquet"
+        matches = list(embeddings_dir.glob(pattern))
     
     if not matches:
         return None, None

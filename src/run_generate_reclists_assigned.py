@@ -15,6 +15,7 @@ warnings.filterwarnings('ignore')
 from .diversify import apply_diversification
 from .io_loaders import load_tsv
 from .representations import get_item_representation, prepare_item_vectors
+from .similarity import SimilarityProvider
 
 
 def load_input_data(
@@ -138,6 +139,8 @@ def generate_reclists(
     feature_vectors: Dict[int, np.ndarray],
     topic_vectors: Dict[int, np.ndarray],
     users_df: pd.DataFrame,
+    feature_similarity_provider: Optional[SimilarityProvider] = None,
+    topic_similarity_provider: Optional[SimilarityProvider] = None,
     k: int = 20
 ) -> Tuple[pd.DataFrame, Dict]:
     """
@@ -145,15 +148,28 @@ def generate_reclists(
     
     Args:
         predictions_df: DataFrame com predições scored
-        feature_vectors: Features para MMR
-        topic_vectors: Tópicos para TD
+        feature_vectors: Features para MMR (compatibilidade, preferir feature_similarity_provider)
+        topic_vectors: Tópicos para TD (compatibilidade, preferir topic_similarity_provider)
         users_df: DataFrame com users.csv (id, algoritmo)
+        feature_similarity_provider: SimilarityProvider para features (recomendado para embeddings)
+        topic_similarity_provider: SimilarityProvider para tópicos (recomendado para embeddings)
         k: Tamanho da lista (default=20)
     
     Returns:
         Tupla (reclists_df, stats)
     """
     print(f"\nGerando listas top-{k}...")
+    
+    # Log do modo de similaridade
+    if feature_similarity_provider is not None:
+        print(f"  - MMR: usando {feature_similarity_provider}")
+    else:
+        print(f"  - MMR: usando vetores tradicionais ({len(feature_vectors)} itens)")
+    
+    if topic_similarity_provider is not None:
+        print(f"  - TD: usando {topic_similarity_provider}")
+    else:
+        print(f"  - TD: usando vetores tradicionais ({len(topic_vectors)} itens)")
     
     # Criar mapeamento user_id -> algoritmo original
     user_algorithm_map = dict(zip(users_df['id'], users_df['algoritmo']))
@@ -185,6 +201,8 @@ def generate_reclists(
             diversify=diversify,
             feature_vectors=feature_vectors,
             topic_vectors=topic_vectors,
+            feature_similarity_provider=feature_similarity_provider,
+            topic_similarity_provider=topic_similarity_provider,
             k=k
         )
         
@@ -326,22 +344,22 @@ def main():
         '--feature-representation',
         type=str,
         default='bin_features',
-        choices=['bin_features', 'ae_features'],
+        choices=['bin_features', 'ae_features', 'svd_features'],
         help='Tipo de representação de features (default: bin_features). Ignorado se --representations usado.'
     )
     parser.add_argument(
         '--topic-representation',
         type=str,
         default='bin_topics',
-        choices=['bin_topics', 'ae_topics'],
+        choices=['bin_topics', 'ae_topics', 'svd_topics'],
         help='Tipo de representação de tópicos (default: bin_topics). Ignorado se --representations usado.'
     )
     parser.add_argument(
         '--representations',
         type=str,
         nargs='+',
-        choices=['bin_features', 'ae_features', 'bin_topics', 'ae_topics'],
-        help='Rodar com múltiplas representações (ex: --representations bin_features ae_features)'
+        choices=['bin_features', 'ae_features', 'svd_features', 'bin_topics', 'ae_topics', 'svd_topics'],
+        help='Rodar com múltiplas representações (ex: --representations bin_features ae_features svd_features)'
     )
     parser.add_argument(
         '--output-dir',
@@ -384,6 +402,10 @@ def main():
         # Se ae_features está presente e ae_topics também, gera ae_features+ae_topics
         if 'ae_features' in feature_reps and 'ae_topics' in topic_reps:
             representations_to_process.append(('ae_features', 'ae_topics'))
+        
+        # Se svd_features está presente e svd_topics também, gera svd_features+svd_topics
+        if 'svd_features' in feature_reps and 'svd_topics' in topic_reps:
+            representations_to_process.append(('svd_features', 'svd_topics'))
         
         # Se bin_features está presente e bin_topics também, gera bin_features+bin_topics
         if 'bin_features' in feature_reps and 'bin_topics' in topic_reps:
@@ -428,12 +450,51 @@ def main():
         topic_vectors = prepare_topic_vectors(topics_df)
         print(f"Topic vectors: {len(topic_vectors):,}")
         
+        # Detectar se estamos usando embeddings e criar SimilarityProviders
+        print("\nDetectando tipo de representação...")
+        feature_similarity_provider = None
+        topic_similarity_provider = None
+        
+        # Detectar embeddings nas features (ae_* ou svd_*)
+        is_feature_embedding = feat_rep.startswith('ae_') or feat_rep.startswith('svd_')
+        if is_feature_embedding:
+            print(f"  - Features: embedding detectado ({feat_rep})")
+            print("    Criando SimilarityProvider com matriz pré-computada...")
+            feature_ids = list(feature_vectors.keys())
+            feature_similarity_provider = SimilarityProvider.from_embeddings(
+                ids=feature_ids,
+                embedding_dict=feature_vectors,
+                metric='cosine',
+                precompute=True
+            )
+            print(f"    {feature_similarity_provider}")
+        else:
+            print(f"  - Features: vetores tradicionais ({feat_rep})")
+        
+        # Detectar embeddings nos tópicos (ae_* ou svd_*)
+        is_topic_embedding = topic_rep.startswith('ae_') or topic_rep.startswith('svd_')
+        if is_topic_embedding:
+            print(f"  - Tópicos: embedding detectado ({topic_rep})")
+            print("    Criando SimilarityProvider com matriz pré-computada...")
+            topic_ids = list(topic_vectors.keys())
+            topic_similarity_provider = SimilarityProvider.from_embeddings(
+                ids=topic_ids,
+                embedding_dict=topic_vectors,
+                metric='cosine',
+                precompute=True
+            )
+            print(f"    {topic_similarity_provider}")
+        else:
+            print(f"  - Tópicos: vetores tradicionais ({topic_rep})")
+        
         # Gerar listas
         reclists_df, stats = generate_reclists(
             predictions_df=predictions_df,
             feature_vectors=feature_vectors,
             topic_vectors=topic_vectors,
             users_df=users_df,
+            feature_similarity_provider=feature_similarity_provider,
+            topic_similarity_provider=topic_similarity_provider,
             k=20
         )
         

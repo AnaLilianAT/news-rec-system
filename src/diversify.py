@@ -3,13 +3,14 @@ Algoritmos de diversificação para recomendações: MMR e TD (Topic Diversifica
 """
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Dict, Optional
-from .similarity import cosine_similarity, max_similarity_to_set
+from typing import List, Tuple, Dict, Optional, Union
+from .similarity import cosine_similarity, max_similarity_to_set, SimilarityProvider
 
 
 def mmr_select(
     ranked_items: List[Tuple[int, float]],
-    feature_vectors: Dict[int, np.ndarray],
+    feature_vectors: Optional[Dict[int, np.ndarray]] = None,
+    similarity_provider: Optional[SimilarityProvider] = None,
     lambda_mmr: float = 0.7,
     k: int = 20
 ) -> List[Tuple[int, float, int]]:
@@ -20,15 +21,24 @@ def mmr_select(
     
     Args:
         ranked_items: Lista de (news_id, score_pred) ordenada por score
-        feature_vectors: Dicionário {news_id: feature_vector}
+        feature_vectors: Dicionário {news_id: feature_vector} (DEPRECATED: usar similarity_provider)
+        similarity_provider: SimilarityProvider para cálculo eficiente de similaridade
         lambda_mmr: Peso para relevância (0.0=pura diversidade, 1.0=puro score)
         k: Número de itens a selecionar
     
     Returns:
         Lista de (news_id, score_pred, rank) com até k itens
     """
+    # Backward compatibility: criar SimilarityProvider se feature_vectors passado
+    if similarity_provider is None and feature_vectors is not None:
+        similarity_provider = SimilarityProvider.from_vectors(feature_vectors)
+    
+    if similarity_provider is None:
+        # Fallback: retornar top-k sem diversificação
+        return [(nid, score, rank + 1) for rank, (nid, score) in enumerate(ranked_items[:k])]
+    
     # Filtrar apenas itens que têm features
-    candidates = [(nid, score) for nid, score in ranked_items if nid in feature_vectors]
+    candidates = [(nid, score) for nid, score in ranked_items if similarity_provider.has_item(nid)]
     
     if not candidates:
         # Fallback: retornar top-k sem diversificação
@@ -54,7 +64,7 @@ def mmr_select(
     
     # MMR selection
     selected = []
-    selected_vectors = []
+    selected_ids = []  # Track IDs for similarity_provider
     remaining = list(candidates)
     
     for iteration in range(k):
@@ -65,18 +75,17 @@ def mmr_select(
         best_idx = 0
         
         for idx, (nid, score) in enumerate(remaining):
-            if nid not in feature_vectors:
+            if not similarity_provider.has_item(nid):
                 continue
             
-            vec = feature_vectors[nid]
             relevance = normalized_scores[nid]
             
-            if not selected_vectors:
+            if not selected_ids:
                 # Primeiro item: escolher o de maior score
                 diversity = 0.0
             else:
-                # Calcular diversidade: 1 - max_sim
-                max_sim = max_similarity_to_set(vec, selected_vectors)
+                # Calcular diversidade usando similarity_provider: 1 - max_sim
+                max_sim = similarity_provider.max_sim_to_set(nid, selected_ids)
                 diversity = 1.0 - max_sim
             
             # MMR = λ * relevance + (1-λ) * diversity
@@ -89,13 +98,13 @@ def mmr_select(
         # Selecionar o melhor item
         nid, score = remaining.pop(best_idx)
         selected.append((nid, score, len(selected) + 1))
-        selected_vectors.append(feature_vectors[nid])
+        selected_ids.append(nid)
     
     # Se não conseguimos k itens com features, completar com os próximos do ranking original
     if len(selected) < k:
-        selected_ids = {nid for nid, _, _ in selected}
+        selected_ids_set = {nid for nid, _, _ in selected}
         for nid, score in ranked_items:
-            if nid not in selected_ids:
+            if nid not in selected_ids_set:
                 selected.append((nid, score, len(selected) + 1))
                 if len(selected) >= k:
                     break
@@ -105,27 +114,39 @@ def mmr_select(
 
 def td_select(
     ranked_items: List[Tuple[int, float]],
-    topic_vectors: Dict[int, np.ndarray],
+    topic_vectors: Optional[Dict[int, np.ndarray]] = None,
+    similarity_provider: Optional[SimilarityProvider] = None,
     k: int = 20,
     fallback_features: Optional[Dict[int, np.ndarray]] = None
 ) -> List[Tuple[int, float, int]]:
     """
     Seleciona top-k itens usando Topic Diversification (TD).
     
-    TD prefere itens que cobrem tópicos diversos (baseado em Topic0..Topic15).
+    TD prefere itens que cobrem tópicos diversos (baseado em Topic0..Topic15 ou embeddings).
     Usa heurística determinística: escolher item com menor sobreposição de tópicos dominantes.
     
     Args:
         ranked_items: Lista de (news_id, score_pred) ordenada por score
-        topic_vectors: Dicionário {news_id: topic_vector (16 dims)}
+        topic_vectors: Dicionário {news_id: topic_vector} (DEPRECATED: usar similarity_provider)
+        similarity_provider: SimilarityProvider para obter vetores de tópicos/embeddings
         k: Número de itens a selecionar
-        fallback_features: Dicionário opcional com features para fallback via cosseno
+        fallback_features: Dicionário opcional com features para fallback via MMR
     
     Returns:
         Lista de (news_id, score_pred, rank) com até k itens
     """
+    # Backward compatibility: criar SimilarityProvider se topic_vectors passado
+    if similarity_provider is None and topic_vectors is not None:
+        similarity_provider = SimilarityProvider.from_vectors(topic_vectors)
+    
     # Filtrar apenas itens que têm tópicos
-    candidates_with_topics = [(nid, score) for nid, score in ranked_items if nid in topic_vectors]
+    if similarity_provider is not None:
+        candidates_with_topics = [(nid, score) for nid, score in ranked_items 
+                                   if similarity_provider.has_item(nid)]
+    elif topic_vectors is not None:
+        candidates_with_topics = [(nid, score) for nid, score in ranked_items if nid in topic_vectors]
+    else:
+        candidates_with_topics = []
     
     if not candidates_with_topics:
         # Fallback para MMR se tópicos não disponíveis
@@ -153,10 +174,14 @@ def td_select(
         best_idx = 0
         
         for idx, (nid, score) in enumerate(remaining):
-            if nid not in topic_vectors:
-                continue
+            # Obter vetor de tópicos
+            if similarity_provider is not None:
+                topic_vec = similarity_provider.get_vector(nid)
+            else:
+                topic_vec = topic_vectors.get(nid) if topic_vectors else None
             
-            topic_vec = topic_vectors[nid]
+            if topic_vec is None:
+                continue
             
             # Identificar top-3 tópicos deste item
             top_topics_idx = np.argsort(topic_vec)[-3:][::-1]  # Top 3 índices
@@ -183,8 +208,12 @@ def td_select(
         selected.append((nid, score, len(selected) + 1))
         
         # Atualizar tópicos cobertos
-        if nid in topic_vectors:
-            topic_vec = topic_vectors[nid]
+        if similarity_provider is not None:
+            topic_vec = similarity_provider.get_vector(nid)
+        else:
+            topic_vec = topic_vectors.get(nid) if topic_vectors else None
+            
+        if topic_vec is not None:
             top_topics_idx = np.argsort(topic_vec)[-3:][::-1]
             selected_dominant_topics.update(top_topics_idx)
     
@@ -205,6 +234,8 @@ def apply_diversification(
     diversify: str,
     feature_vectors: Optional[Dict[int, np.ndarray]] = None,
     topic_vectors: Optional[Dict[int, np.ndarray]] = None,
+    feature_similarity_provider: Optional[SimilarityProvider] = None,
+    topic_similarity_provider: Optional[SimilarityProvider] = None,
     k: int = 20
 ) -> List[Tuple[int, float, int]]:
     """
@@ -213,8 +244,10 @@ def apply_diversification(
     Args:
         ranked_items: Lista de (news_id, score_pred) ordenada por score
         diversify: Estratégia ('none', 'mmr', 'td')
-        feature_vectors: Features para MMR/fallback
-        topic_vectors: Tópicos para TD
+        feature_vectors: Features para MMR/fallback (DEPRECATED: usar feature_similarity_provider)
+        topic_vectors: Tópicos para TD (DEPRECATED: usar topic_similarity_provider)
+        feature_similarity_provider: SimilarityProvider para features (preferível)
+        topic_similarity_provider: SimilarityProvider para tópicos (preferível)
         k: Número de itens a retornar
     
     Returns:
@@ -225,19 +258,46 @@ def apply_diversification(
         return [(nid, score, rank + 1) for rank, (nid, score) in enumerate(ranked_items[:k])]
     
     elif diversify == 'mmr':
-        if feature_vectors is None:
+        # Usar similarity_provider se disponível, senão feature_vectors
+        if feature_similarity_provider is None and feature_vectors is not None:
+            feature_similarity_provider = SimilarityProvider.from_vectors(feature_vectors)
+        
+        if feature_similarity_provider is None:
             # Fallback para none
             return [(nid, score, rank + 1) for rank, (nid, score) in enumerate(ranked_items[:k])]
-        return mmr_select(ranked_items, feature_vectors, lambda_mmr=0.7, k=k)
+        
+        return mmr_select(
+            ranked_items, 
+            similarity_provider=feature_similarity_provider,
+            lambda_mmr=0.7, 
+            k=k
+        )
     
     elif diversify == 'td':
-        if topic_vectors is None:
+        # Usar similarity_provider se disponível, senão topic_vectors
+        if topic_similarity_provider is None and topic_vectors is not None:
+            topic_similarity_provider = SimilarityProvider.from_vectors(topic_vectors)
+        
+        if topic_similarity_provider is None:
             # Fallback para MMR ou none
-            if feature_vectors is not None:
-                return mmr_select(ranked_items, feature_vectors, lambda_mmr=0.7, k=k)
+            if feature_similarity_provider is not None or feature_vectors is not None:
+                if feature_similarity_provider is None:
+                    feature_similarity_provider = SimilarityProvider.from_vectors(feature_vectors)
+                return mmr_select(
+                    ranked_items, 
+                    similarity_provider=feature_similarity_provider, 
+                    lambda_mmr=0.7, 
+                    k=k
+                )
             else:
                 return [(nid, score, rank + 1) for rank, (nid, score) in enumerate(ranked_items[:k])]
-        return td_select(ranked_items, topic_vectors, k=k, fallback_features=feature_vectors)
+        
+        return td_select(
+            ranked_items, 
+            similarity_provider=topic_similarity_provider, 
+            k=k, 
+            fallback_features=feature_vectors
+        )
     
     else:
         # Estratégia desconhecida: fallback para none

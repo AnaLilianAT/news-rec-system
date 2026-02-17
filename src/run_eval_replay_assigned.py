@@ -9,12 +9,13 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 from itertools import combinations
 import warnings
 warnings.filterwarnings('ignore')
 
-from .similarity import cosine_similarity
+from .similarity import cosine_similarity, compute_similarity_from_embeddings, compute_homogeneity
+from .representations import get_item_representation
 
 
 def load_eval_data(
@@ -224,32 +225,123 @@ def prepare_topic_vectors(topics_df: pd.DataFrame) -> Dict[int, np.ndarray]:
     }
 
 
-def calculate_gh_cosine(news_ids: List[int], feature_vectors: Dict[int, np.ndarray]) -> float:
+def load_embeddings_if_available(
+    representation_suffix: Optional[str],
+    output_dir: Path,
+    embedding_dim: Optional[int] = None,
+    seed: Optional[int] = None
+) -> Tuple[Optional[Dict[int, np.ndarray]], Optional[Dict[int, np.ndarray]]]:
+    """
+    Tenta carregar embeddings se o sufixo indicar uso de embeddings.
+    
+    Args:
+        representation_suffix: Sufixo da representação (ex: 'ae_features+ae_topics', 'svd_features+svd_topics')
+        output_dir: Diretório de outputs
+        embedding_dim: Dimensão dos embeddings (opcional)
+        seed: Seed dos embeddings (opcional)
+    
+    Returns:
+        Tupla (feature_embeddings, topic_embeddings) ou (None, None) se não houver embeddings
+    """
+    if not representation_suffix:
+        return None, None
+    
+    # Parsear sufixo para extrair tipos de representação
+    parts = representation_suffix.split('+')
+    if len(parts) != 2:
+        return None, None
+    
+    feature_rep_type, topic_rep_type = parts
+    
+    # Verificar se são tipos de embedding (ae_* ou svd_*)
+    is_feature_embedding = feature_rep_type.startswith('ae_') or feature_rep_type.startswith('svd_')
+    is_topic_embedding = topic_rep_type.startswith('ae_') or topic_rep_type.startswith('svd_')
+    
+    feature_embeddings = None
+    topic_embeddings = None
+    
+    try:
+        if is_feature_embedding:
+            print(f"  Carregando embeddings de features: {feature_rep_type}")
+            features_rep_df = get_item_representation(
+                kind=feature_rep_type,
+                output_dir=str(output_dir),
+                embedding_dim=embedding_dim,
+                seed=seed
+            )
+            if features_rep_df is not None:
+                emb_cols = [c for c in features_rep_df.columns if c.startswith('emb_')]
+                feature_embeddings = {
+                    row['news_id']: row[emb_cols].values.astype(float)
+                    for _, row in features_rep_df.iterrows()
+                }
+                print(f"  [OK] Feature embeddings: {len(feature_embeddings):,} itens × {len(emb_cols)} dims")
+        
+        if is_topic_embedding:
+            print(f"  Carregando embeddings de tópicos: {topic_rep_type}")
+            topics_rep_df = get_item_representation(
+                kind=topic_rep_type,
+                output_dir=str(output_dir),
+                embedding_dim=embedding_dim,
+                seed=seed
+            )
+            if topics_rep_df is not None:
+                emb_cols = [c for c in topics_rep_df.columns if c.startswith('emb_')]
+                topic_embeddings = {
+                    row['news_id']: row[emb_cols].values.astype(float)
+                    for _, row in topics_rep_df.iterrows()
+                }
+                print(f"  [OK] Topic embeddings: {len(topic_embeddings):,} itens × {len(emb_cols)} dims")
+    
+    except Exception as e:
+        print(f"  [AVISO] Erro ao carregar embeddings: {e}")
+        print(f"  Continuando com vetores binários/contínuos...")
+        return None, None
+    
+    return feature_embeddings, topic_embeddings
+
+
+def calculate_gh_cosine(
+    news_ids: List[int],
+    feature_vectors: Optional[Dict[int, np.ndarray]] = None,
+    similarity_matrix: Optional[np.ndarray] = None,
+    ordered_ids: Optional[List[int]] = None
+) -> float:
     """
     Calcula homogeneidade usando similaridade cosseno entre features.
     
+    Suporta dois modos:
+    1. Vetores: calcula similaridade on-the-fly (modo legado)
+    2. Matriz precalculada: usa similarity_matrix para eficiência
+    
     Args:
         news_ids: Lista de news_ids da top-20
-        feature_vectors: Dicionário com vetores de features
+        feature_vectors: Dicionário com vetores de features (modo 1)
+        similarity_matrix: Matriz de similaridade precalculada (modo 2)
+        ordered_ids: IDs na ordem da matriz (modo 2)
     
     Returns:
         GH médio (similaridade cosseno média entre todos os pares)
     """
-    # Filtrar apenas news_ids que têm features
-    valid_ids = [nid for nid in news_ids if nid in feature_vectors]
-    
-    if len(valid_ids) < 2:
+    # Usar compute_homogeneity com suporte a matriz precalculada
+    if similarity_matrix is not None and ordered_ids is not None:
+        # MODO 2: Matriz precalculada (embedding-based)
+        return compute_homogeneity(
+            item_ids=news_ids,
+            similarity_matrix=similarity_matrix,
+            ordered_ids=ordered_ids,
+            normalize_by='n_pairs'  # Média das similaridades (compatível com código original)
+        )
+    elif feature_vectors is not None:
+        # MODO 1: Vetores (modo legado)
+        return compute_homogeneity(
+            item_ids=news_ids,
+            vectors=feature_vectors,
+            metric='cosine',
+            normalize_by='n_pairs'  # Média das similaridades
+        )
+    else:
         return np.nan
-    
-    # Calcular similaridade entre todos os pares
-    similarities = []
-    for nid1, nid2 in combinations(valid_ids, 2):
-        vec1 = feature_vectors[nid1]
-        vec2 = feature_vectors[nid2]
-        sim = cosine_similarity(vec1, vec2)
-        similarities.append(sim)
-    
-    return np.mean(similarities) if similarities else np.nan
 
 
 def jaccard_similarity(set1: set, set2: set) -> float:
@@ -302,21 +394,44 @@ def calculate_gh_jaccard(news_ids: List[int], topic_vectors: Dict[int, np.ndarra
 
 def calculate_gh_metrics(
     reclists_df: pd.DataFrame,
-    feature_vectors: Dict[int, np.ndarray],
-    topic_vectors: Dict[int, np.ndarray]
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    feature_vectors: Optional[Dict[int, np.ndarray]] = None,
+    topic_vectors: Optional[Dict[int, np.ndarray]] = None,
+    feature_sim_matrix: Optional[np.ndarray] = None,
+    feature_ordered_ids: Optional[List[int]] = None,
+    topic_sim_matrix: Optional[np.ndarray] = None,
+    topic_ordered_ids: Optional[List[int]] = None
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Calcula métricas de homogeneidade (GH) para cada lista top-20.
     
+    Suporta dois modos:
+    1. Vetores: calcula similaridade on-the-fly (modo legado)
+    2. Matriz precalculada: usa matrizes de similaridade (embedding-based, mais eficiente)
+    
     Args:
         reclists_df: Listas top-20
-        feature_vectors: Features para GH_COSINE
-        topic_vectors: Tópicos para GH_JACCARD
+        feature_vectors: Features para GH_COSINE (modo 1)
+        topic_vectors: Tópicos para GH_JACCARD (modo 1)
+        feature_sim_matrix: Matriz de similaridade de features (modo 2)
+        feature_ordered_ids: IDs na ordem da matriz de features (modo 2)
+        topic_sim_matrix: Matriz de similaridade de topics (modo 2)
+        topic_ordered_ids: IDs na ordem da matriz de topics (modo 2)
     
     Returns:
-        Tupla (gh_cosine_by_algorithm, gh_jaccard_by_algorithm)
+        Tupla (gh_cosine_by_algorithm, gh_jaccard_by_algorithm, gh_df)
     """
     print("\nCalculando GH (homogeneidade)...")
+    
+    # Indicar qual modo está sendo usado
+    if feature_sim_matrix is not None:
+        print("  [OK] Usando matriz de similaridade precalculada para features (embedding-based)")
+    else:
+        print("  ℹ Usando vetores binários/contínuos para features (modo legado)")
+    
+    if topic_sim_matrix is not None:
+        print("  [OK] Usando matriz de similaridade precalculada para topics (embedding-based)")
+    else:
+        print("  ℹ Usando vetores binários/contínuos para topics (modo legado)")
     
     gh_results = []
     
@@ -328,10 +443,25 @@ def calculate_gh_metrics(
         news_ids = group['news_id'].tolist()
         
         # GH_COSINE_FEATURES
-        gh_cosine = calculate_gh_cosine(news_ids, feature_vectors)
+        gh_cosine = calculate_gh_cosine(
+            news_ids=news_ids,
+            feature_vectors=feature_vectors,
+            similarity_matrix=feature_sim_matrix,
+            ordered_ids=feature_ordered_ids
+        )
         
         # GH_JACCARD_TOPICS
-        gh_jaccard = calculate_gh_jaccard(news_ids, topic_vectors)
+        # Para topics, usar matriz se disponível OU vetores
+        if topic_sim_matrix is not None and topic_ordered_ids is not None:
+            # Usar compute_homogeneity diretamente para topics também
+            gh_jaccard = compute_homogeneity(
+                item_ids=news_ids,
+                similarity_matrix=topic_sim_matrix,
+                ordered_ids=topic_ordered_ids,
+                normalize_by='n_pairs'
+            )
+        else:
+            gh_jaccard = calculate_gh_jaccard(news_ids, topic_vectors)
         
         gh_results.append({
             'user_id': user_id,
@@ -552,6 +682,18 @@ def main():
         default='outputs',
         help='Diretório de saída (default: outputs)'
     )
+    parser.add_argument(
+        '--embedding-dim',
+        type=int,
+        default=None,
+        help='Dimensão dos embeddings (default: auto-detect)'
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=None,
+        help='Seed dos embeddings (default: auto-detect)'
+    )
     
     args = parser.parse_args()
     
@@ -619,9 +761,48 @@ def main():
         topic_vectors = prepare_topic_vectors(topics_df)
         print(f"Topic vectors: {len(topic_vectors):,}")
         
-        # Calcular GH
+        # Tentar carregar embeddings se disponíveis
+        feature_embeddings, topic_embeddings = load_embeddings_if_available(
+            representation_suffix=suffix,
+            output_dir=output_path,
+            embedding_dim=args.embedding_dim,
+            seed=args.seed
+        )
+        
+        # Precalcular matrizes de similaridade se houver embeddings
+        feature_sim_matrix, feature_ordered_ids = None, None
+        topic_sim_matrix, topic_ordered_ids = None, None
+        
+        if feature_embeddings is not None:
+            print("\n  Precalculando matriz de similaridade para features...")
+            # Pegar todos os IDs únicos das listas de recomendação
+            all_news_ids = reclists_df['news_id'].unique().tolist()
+            feature_ordered_ids, feature_sim_matrix = compute_similarity_from_embeddings(
+                ids=all_news_ids,
+                embeddings=feature_embeddings,
+                metric='cosine'
+            )
+            print(f"  [OK] Matriz de similaridade: {feature_sim_matrix.shape[0]} × {feature_sim_matrix.shape[1]}")
+        
+        if topic_embeddings is not None:
+            print("\n  Precalculando matriz de similaridade para topics...")
+            all_news_ids = reclists_df['news_id'].unique().tolist()
+            topic_ordered_ids, topic_sim_matrix = compute_similarity_from_embeddings(
+                ids=all_news_ids,
+                embeddings=topic_embeddings,
+                metric='cosine'
+            )
+            print(f"  [OK] Matriz de similaridade: {topic_sim_matrix.shape[0]} × {topic_sim_matrix.shape[1]}")
+        
+        # Calcular GH (com ou sem matrizes precalculadas)
         gh_cosine_by_algo, gh_jaccard_by_algo, gh_df = calculate_gh_metrics(
-            reclists_df, feature_vectors, topic_vectors
+            reclists_df=reclists_df,
+            feature_vectors=feature_vectors,
+            topic_vectors=topic_vectors,
+            feature_sim_matrix=feature_sim_matrix,
+            feature_ordered_ids=feature_ordered_ids,
+            topic_sim_matrix=topic_sim_matrix,
+            topic_ordered_ids=topic_ordered_ids
         )
         
         # Agregar métricas por usuário

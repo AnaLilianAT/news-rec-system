@@ -2,12 +2,15 @@
 """
 Sweep de dimensao de embedding x seed para analise de variabilidade.
 
+Suporta autoencoder (ae) e truncated SVD (svd).
+
 Output: outputs/experiments/embedding_dim_seed_sweep_runs.parquet
 Colunas: [d, seed, algorithm, rmse, gh_list, embedding_cache_key, runtime_sec, timestamp]
 
 Uso:
     python -m src.experiments.run_embedding_dim_seed_sweep --dims 13 18 --n-seeds 2
     python -m src.experiments.run_embedding_dim_seed_sweep --d-min 13 --d-max 30 --step 5
+    python -m src.experiments.run_embedding_dim_seed_sweep --embedding-method svd
     python -m src.experiments.run_embedding_dim_seed_sweep --resume
 """
 
@@ -27,78 +30,94 @@ from ..utils.dim_grid import build_dims, compute_d_min_heuristic
 from .seed_utils import load_or_create_seeds
 
 
-def train_embedding(d: int, seed: int, force: bool = False) -> Tuple[bool, str, str]:
+def train_embedding(d: int, seed: int, method: str = 'ae', force: bool = False) -> Tuple[bool, str, str]:
     """Treina/carrega embeddings para (d, seed)."""
     print(f"\n{'-'*70}")
-    print(f"  EMBEDDINGS: d={d}, seed={seed}")
+    print(f"  EMBEDDINGS: método={method.upper()}, d={d}, seed={seed}")
     print(f"{'-'*70}")
     
     from ..embeddings.cache_utils import find_cached_embedding
     
     if not force:
+        rep_type = f'{method}_features'
         features_path, features_json = find_cached_embedding(
-            base_dir=Path('outputs'), representation_type='ae_features', d=d, seed=seed
+            base_dir=Path('outputs'), representation_type=rep_type, d=d, seed=seed
         )
         
         if features_path and features_path.exists():
             with open(features_json, 'r') as f:
                 metadata = json.load(f)
-            cache_key = metadata.get('cache_key', f'd{d}_seed{seed}')
+            cache_key = metadata.get('cache_key', f'd{d}_seed{seed}_{method}')
             print(f"[OK] Cache encontrado: {cache_key}")
-            return True, f"Cache d={d}, seed={seed}", cache_key
+            return True, f"Cache d={d}, seed={seed}, {method}", cache_key
     
     cmd = [sys.executable, '-m', 'src.embeddings.train_embeddings',
-           '--embedding-dim', str(d), '--seed', str(seed), '--data-dir', 'outputs']
+           '--embedding-dim', str(d), '--seed', str(seed), 
+           '--embedding-method', method, '--data-dir', 'outputs']
     if force:
         cmd.append('--force')
     
     print(f"[>] Treinando...")
     
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True, cwd=Path.cwd())
-        features_path, features_json = find_cached_embedding(
-            base_dir=Path('outputs'), representation_type='ae_features', d=d, seed=seed
-        )
+    # Não capturar output - deixar imprimir diretamente no terminal
+    # Verificaremos sucesso pela existência dos arquivos, não pelo returncode
+    result = subprocess.run(cmd, cwd=Path.cwd())
+    
+    # Verificar sucesso pela existência dos arquivos, não pelo returncode
+    rep_type = f'{method}_features'
+    features_path, features_json = find_cached_embedding(
+        base_dir=Path('outputs'), representation_type=rep_type, d=d, seed=seed
+    )
+    
+    if features_path and features_path.exists():
         if features_json and features_json.exists():
             with open(features_json, 'r') as f:
-                cache_key = json.load(f).get('cache_key', f'd{d}_seed{seed}')
+                cache_key = json.load(f).get('cache_key', f'd{d}_seed{seed}_{method}')
         else:
-            cache_key = f'd{d}_seed{seed}'
+            cache_key = f'd{d}_seed{seed}_{method}'
         print(f"[OK] Treinado: {cache_key}")
-        return True, f"OK d={d}, seed={seed}", cache_key
-    except subprocess.CalledProcessError as e:
-        print(f"[X] Erro: {e.stderr[:200]}")
-        return False, f"Erro d={d}, seed={seed}", ""
+        return True, f"OK d={d}, seed={seed}, {method}", cache_key
+    else:
+        print(f"[X] Falhou: arquivos não foram criados")
+        return False, f"Erro d={d}, seed={seed}, {method}", ""
 
 
-def run_pipeline(d: int, seed: int) -> Tuple[bool, str]:
+def run_pipeline(d: int, seed: int, method: str = 'ae') -> Tuple[bool, str]:
     """Roda pipeline completo para (d, seed)."""
     print(f"\n{'-'*70}")
-    print(f"  PIPELINE: d={d}, seed={seed}")
+    print(f"  PIPELINE: método={method.upper()}, d={d}, seed={seed}")
     print(f"{'-'*70}")
+    
+    feature_rep = f'{method}_features'
+    topic_rep = f'{method}_topics'
     
     # 1. Generate reclists
     print("[>] [1/3] Gerando listas...")
     cmd1 = [sys.executable, '-m', 'src.run_generate_reclists_assigned',
-            '--representations', 'ae_features', 'ae_topics',
+            '--representations', feature_rep, topic_rep,
             '--embedding-dim', str(d), '--seed', str(seed)]
     
-    try:
-        subprocess.run(cmd1, check=True, capture_output=True, text=True, cwd=Path.cwd())
+    result = subprocess.run(cmd1, cwd=Path.cwd())
+    if result.returncode == 0:
         print("[OK] Listas geradas")
-    except subprocess.CalledProcessError as e:
-        print(f"[X] Erro: {e.stderr[:200]}")
+    else:
+        print(f"[X] Erro ao gerar listas (returncode={result.returncode})")
         return False, f"Erro generate_reclists"
     
     # 2. Eval
     print("[>] [2/3] Avaliando...")
-    cmd2 = [sys.executable, '-m', 'src.run_eval_replay_assigned']
+    # run_eval_replay_assigned espera representações no formato "feature+topic"
+    rep_suffix = f"{feature_rep}+{topic_rep}"
+    cmd2 = [sys.executable, '-m', 'src.run_eval_replay_assigned',
+            '--representations', rep_suffix,
+            '--embedding-dim', str(d),
+            '--seed', str(seed)]
     
-    try:
-        subprocess.run(cmd2, check=True, capture_output=True, text=True, cwd=Path.cwd())
+    result = subprocess.run(cmd2, cwd=Path.cwd())
+    if result.returncode == 0:
         print("[OK] Avaliacao concluida")
-    except subprocess.CalledProcessError as e:
-        print(f"[X] Erro: {e.stderr[:200]}")
+    else:
+        print(f"[X] Erro ao avaliar (returncode={result.returncode})")
         return False, f"Erro eval"
     
     # 3. Export
@@ -106,23 +125,23 @@ def run_pipeline(d: int, seed: int) -> Tuple[bool, str]:
     cmd3 = [sys.executable, '-m', 'src.run_export_thesis_tables',
             '--embedding-dim', str(d)]
     
-    try:
-        subprocess.run(cmd3, check=True, capture_output=True, text=True, cwd=Path.cwd())
+    result = subprocess.run(cmd3, cwd=Path.cwd())
+    if result.returncode == 0:
         print("[OK] Tabelas exportadas")
-    except subprocess.CalledProcessError as e:
-        print(f"[X] Erro: {e.stderr[:200]}")
+    else:
+        print(f"[X] Erro ao exportar (returncode={result.returncode})")
         return False, f"Erro export"
     
     print(f"[OK] Pipeline completo")
-    return True, f"OK d={d}, seed={seed}"
+    return True, f"OK d={d}, seed={seed}"  
 
 
-def collect_metrics(d: int, seed: int, cache_key: str) -> Optional[pd.DataFrame]:
+def collect_metrics(d: int, seed: int, method: str, cache_key: str) -> Optional[pd.DataFrame]:
     """Coleta metricas RMSE e GH."""
     print(f"[>] Coletando metricas...")
     
     tables_dir = Path('outputs/tabelas')
-    suffix = f'ae_features+ae_topics_dim{d}'
+    suffix = f'{method}_features+{method}_topics_dim{d}'
     
     rmse_path = tables_dir / f'tabela_6_3_RMSE_{suffix}.csv'
     gh_path = tables_dir / f'tabela_6_6_GH_listas_{suffix}.csv'
@@ -195,6 +214,8 @@ def main():
     parser.add_argument('--cleanup-intermediate', action='store_true')
     parser.add_argument('--out', type=str, 
                        default='outputs/experiments/embedding_dim_seed_sweep_runs.parquet')
+    parser.add_argument('--embedding-method', type=str, choices=['ae', 'svd'],
+                       default='svd', help='Método de embedding: ae ou svd (default: svd)')
     
     args = parser.parse_args()
     use_resume = args.resume and not args.no_resume
@@ -202,6 +223,8 @@ def main():
     print("="*70)
     print(" EMBEDDING DIMENSION x SEED SWEEP")
     print("="*70)
+    print(f"\nMétodo de embedding: {args.embedding_method.upper()}")
+    print(f"  {'Autoencoder' if args.embedding_method == 'ae' else 'Truncated SVD'}")
     
     # 1. Dimensoes
     if args.dims:
@@ -261,19 +284,19 @@ def main():
             iter_start = time.time()
             
             # Train
-            success_emb, _, cache_key = train_embedding(d, seed, args.force)
+            success_emb, _, cache_key = train_embedding(d, seed, args.embedding_method, args.force)
             if not success_emb:
                 fail_count += 1
                 continue
             
             # Pipeline
-            success_pipe, _ = run_pipeline(d, seed)
+            success_pipe, _ = run_pipeline(d, seed, args.embedding_method)
             if not success_pipe:
                 fail_count += 1
                 continue
             
             # Metrics
-            df_metrics = collect_metrics(d, seed, cache_key)
+            df_metrics = collect_metrics(d, seed, args.embedding_method, cache_key)
             if df_metrics is None:
                 fail_count += 1
                 continue

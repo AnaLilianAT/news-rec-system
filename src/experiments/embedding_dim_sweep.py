@@ -2,7 +2,7 @@
 Sweep de dimensão de embedding para análise de trade-offs.
 
 Este script realiza um experimento de varredura (sweep) de diferentes dimensões
-de embedding do autoencoder, rodando o pipeline completo para cada dimensão e
+de embedding (autoencoder ou SVD), rodando o pipeline completo para cada dimensão e
 coletando métricas RMSE e GH por algoritmo.
 
 Heurística de d_min:
@@ -17,6 +17,7 @@ Exemplo para D_bin=99 (83 features + 16 tópicos):
 
 Uso:
     python -m src.experiments.embedding_dim_sweep
+    python -m src.experiments.embedding_dim_sweep --embedding-method svd
     python -m src.experiments.embedding_dim_sweep --dmin 8 --dmax 64
     python -m src.experiments.embedding_dim_sweep --dims 8 16 32 64
     python -m src.experiments.embedding_dim_sweep --force
@@ -51,7 +52,7 @@ def compute_d_min_heuristic(d_bin: int) -> int:
         Dimensão mínima recomendada
     
     Examples:
-        >>> compute_d_min_heuristic(99)  # 83 features + 16 topics
+        >>> compute_d_min_heuristic(83)  # 83 features
         13
         >>> compute_d_min_heuristic(200)
         16
@@ -187,30 +188,35 @@ def train_embeddings(d: int, force: bool = False) -> Tuple[bool, str]:
         return False, error_msg
 
 
-def run_pipeline_for_dim(d: int) -> Tuple[bool, str]:
+def run_pipeline_for_dim(d: int, method: str = 'ae') -> Tuple[bool, str]:
     """
     Roda pipeline para dimensão d usando representação de embeddings.
     
     Pipeline:
-    1. generate_reclists (ae_features+ae_topics)
+    1. generate_reclists (ae_features+ae_topics ou svd_features+svd_topics)
     2. eval_replay
     3. export_thesis_tables
     
     Args:
         d: Dimensão do embedding
+        method: Método de embedding ('ae' ou 'svd')
     
     Returns:
         Tupla (sucesso, mensagem)
     """
     print(f"\n{'='*70}")
-    print(f"  RODANDO PIPELINE (d={d})")
+    print(f"  RODANDO PIPELINE (método={method.upper()}, d={d})")
     print(f"{'='*70}")
+    
+    # Determinar representações baseado no método
+    feature_rep = f'{method}_features'
+    topic_rep = f'{method}_topics'
     
     # 1. Generate reclists
     print("\n[1/3] Gerando listas de recomendação...")
     cmd_reclists = [
         sys.executable, '-m', 'src.run_generate_reclists_assigned',
-        '--representations', 'ae_features', 'ae_topics',
+        '--representations', feature_rep, topic_rep,
         '--embedding-dim', str(d)
     ]
     
@@ -255,12 +261,13 @@ def run_pipeline_for_dim(d: int) -> Tuple[bool, str]:
     return True, f"Pipeline OK para d={d}"
 
 
-def collect_metrics(d: int) -> Optional[pd.DataFrame]:
+def collect_metrics(d: int, method: str = 'ae') -> Optional[pd.DataFrame]:
     """
     Coleta métricas RMSE e GH por algoritmo para dimensão d.
     
     Args:
         d: Dimensão do embedding
+        method: Método de embedding ('ae' ou 'svd')
     
     Returns:
         DataFrame com colunas [representation, d, algorithm, rmse, gh_list]
@@ -269,9 +276,8 @@ def collect_metrics(d: int) -> Optional[pd.DataFrame]:
     outputs_dir = Path('outputs')
     tables_dir = outputs_dir / 'tabelas'
     
-    # Determinar sufixo baseado na representação
-    # Como rodamos com ae_features+ae_topics, o sufixo é esse
-    suffix = f'ae_features+ae_topics_dim{d}'
+    # Determinar sufixo baseado na representação e método
+    suffix = f'{method}_features+{method}_topics_dim{d}'
     
     rmse_path = tables_dir / f'tabela_6_3_RMSE_{suffix}.csv'
     gh_path = tables_dir / f'tabela_6_6_GH_listas_{suffix}.csv'
@@ -350,11 +356,21 @@ def main():
         help='Gerar gráficos automaticamente após o sweep'
     )
     
+    parser.add_argument(
+        '--embedding-method',
+        type=str,
+        choices=['ae', 'svd'],
+        default='ae',
+        help='Método de embedding: ae (autoencoder) ou svd (truncated SVD) (default: ae)'
+    )
+    
     args = parser.parse_args()
     
     print("="*70)
     print("  SWEEP DE DIMENSÃO DE EMBEDDING")
     print("="*70)
+    print(f"\nMétodo de embedding: {args.embedding_method.upper()}")
+    print(f"  {'Autoencoder' if args.embedding_method == 'ae' else 'Truncated SVD'}")
     
     # Detectar dimensão binária (D_bin)
     print("\nDetectando dimensão binária (D_bin)...")

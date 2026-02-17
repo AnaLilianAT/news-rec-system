@@ -55,6 +55,41 @@ AUTOENCODER_CONFIG = {
 }
 
 # ============================================================================
+# TRUNCATED SVD (EMBEDDINGS)
+# ============================================================================
+
+# Configurações centralizadas do TruncatedSVD (Latent Semantic Analysis)
+# Método alternativo ao autoencoder: determinístico, rápido, linear
+SVD_CONFIG = {
+    # Arquitetura
+    'n_components': 32,            # Número de componentes SVD (dimensão do embedding)
+    'n_iter': 5,                   # Número de iterações do algoritmo SVD
+    
+    # Tratamento de features contínuas
+    'continuous_cols': ['polaridade', 'subjetividade'],  # Colunas contínuas
+    'concat_continuous_after': True,  # Se True, concatena após embedding SVD
+    
+    # Pós-processamento
+    'normalize_l2': True,          # Normalizar embeddings (L2) após extração
+    
+    # Reprodutibilidade
+    'random_state': RANDOM_SEED,   # Seed para SVD
+    
+    # Identificadores
+    'id_col': 'news_id',           # Nome da coluna de identificação
+}
+
+# ============================================================================
+# MÉTODOS DE EMBEDDING DISPONÍVEIS
+# ============================================================================
+
+# Métodos de embedding suportados
+EMBEDDING_METHODS = ['autoencoder', 'truncated_svd']
+
+# Método padrão
+DEFAULT_EMBEDDING_METHOD = 'autoencoder'
+
+# ============================================================================
 # PIPELINE
 # ============================================================================
 

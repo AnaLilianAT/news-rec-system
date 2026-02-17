@@ -68,13 +68,15 @@ def get_item_representation(
         kind: Tipo de representação
               - 'bin_features': Features binárias + numéricas (canonical_features.parquet)
               - 'bin_topics': Tópicos binários (canonical_topics.parquet)
-              - 'ae_features': Embeddings de features
-              - 'ae_topics': Embeddings de tópicos
+              - 'ae_features': Embeddings de features (autoencoder)
+              - 'ae_topics': Embeddings de tópicos (autoencoder)
+              - 'svd_features': Embeddings de features (TruncatedSVD)
+              - 'svd_topics': Embeddings de tópicos (TruncatedSVD)
         data_path: Caminho explícito para o arquivo (opcional)
         output_dir: Diretório base dos outputs (default: 'outputs')
-        embedding_dim: Dimensão dos embeddings (apenas para ae_features/ae_topics).
+        embedding_dim: Dimensão dos embeddings (apenas para embeddings ae_*/svd_*).
                       Se None, usa 32 como padrão ou detecta automaticamente.
-        seed: Seed usada no treinamento do embedding (apenas para ae_features/ae_topics).
+        seed: Seed usada no treinamento do embedding (apenas para embeddings ae_*/svd_*).
               Se None, tenta encontrar arquivo mais recente ou usa busca por padrão.
         **kwargs: Argumentos adicionais (para futura compatibilidade)
     
@@ -164,10 +166,59 @@ def get_item_representation(
                 f"--embedding-dim {d} --seed <SEED>"
             )
     
+    # Para embeddings SVD, buscar por padrão de arquivo svd_*_d{d}_seed{s}.parquet
+    elif kind in ['svd_features', 'svd_topics']:
+        # Se data_path explícito foi fornecido, usar diretamente
+        if data_path:
+            file_path = data_path
+            if not file_path.exists():
+                raise FileNotFoundError(
+                    f"Arquivo de embedding SVD não encontrado: {file_path}"
+                )
+            return _load_embedding_representation(file_path, kind)
+        
+        # Usar embedding_dim se fornecido, caso contrário 32
+        d = embedding_dim if embedding_dim is not None else 32
+        
+        # Buscar arquivo SVD no diretório de embeddings
+        embeddings_dir = output_path / "embeddings"
+        
+        # Se seed fornecida, buscar exatamente
+        if seed is not None:
+            pattern = f"{kind}_d{d}_seed{seed}.parquet"
+            file_path = embeddings_dir / pattern
+            
+            if file_path.exists():
+                return _load_embedding_representation(file_path, kind)
+            else:
+                raise FileNotFoundError(
+                    f"Embedding SVD não encontrado: {file_path}\n"
+                    f"Execute o treinamento primeiro com: python -m src.embeddings.truncated_svd "
+                    f"--n-components {d} --random-state {seed}"
+                )
+        else:
+            # Seed não fornecida: buscar qualquer embedding com d
+            if embeddings_dir.exists():
+                pattern = f"{kind}_d{d}_seed*.parquet"
+                matches = sorted(embeddings_dir.glob(pattern))
+                
+                if matches:
+                    # Usar primeiro match encontrado
+                    parquet_path = matches[0]
+                    print(f"[AVISO] Seed não especificada para SVD. Usando: {parquet_path.name}")
+                    return _load_embedding_representation(parquet_path, kind)
+            
+            raise FileNotFoundError(
+                f"Nenhum embedding SVD encontrado para {kind} com d={d}\n"
+                f"Execute o treinamento primeiro com: python -m src.embeddings.truncated_svd "
+                f"--n-components {d} --random-state <SEED>"
+            )
+    
     else:
         raise ValueError(
             f"Tipo de representação desconhecido: '{kind}'. "
-            f"Tipos válidos: ['bin_features', 'bin_topics', 'ae_features', 'ae_topics']"
+            f"Tipos válidos: ['bin_features', 'bin_topics', 'ae_features', 'ae_topics', "
+            f"'svd_features', 'svd_topics']"
         )
 
 

@@ -1,8 +1,12 @@
 """
-Script para treinar autoencoders e gerar embeddings.
+Script para treinar autoencoders/SVD e gerar embeddings.
 
-Carrega matrizes binárias (features e tópicos), treina AEs separados,
-e salva embeddings com cache + metadados para reuso.
+Carrega matrizes binárias (features e tópicos), treina modelos separados
+(autoencoder ou TruncatedSVD), e salva embeddings com cache + metadados para reuso.
+
+Suporta múltiplos métodos de embedding via --embedding-method:
+  - ae (autoencoder): Denoising autoencoder com camada oculta
+  - svd (truncated_svd): Decomposição SVD truncada (LSA)
 """
 
 import argparse
@@ -579,11 +583,11 @@ def train_and_export_embeddings(
 
 
 def main():
-    """CLI para treinar autoencoders e gerar embeddings."""
+    """CLI para treinar embeddings (autoencoder ou SVD)."""
     cfg = AUTOENCODER_CONFIG
     
     parser = argparse.ArgumentParser(
-        description="Treina autoencoders e gera embeddings de features e tópicos"
+        description="Treina embeddings de features e tópicos (autoencoder ou TruncatedSVD)"
     )
     parser.add_argument(
         '--data-dir',
@@ -667,26 +671,48 @@ def main():
         action='store_true',
         help='Força retreinamento mesmo se cache válido existir'
     )
+    parser.add_argument(
+        '--embedding-method',
+        type=str,
+        choices=['ae', 'svd'],
+        default='ae',
+        help='Método de embedding: ae (autoencoder) ou svd (truncated_svd)'
+    )
     
     args = parser.parse_args()
     
-    train_and_export_embeddings(
-        data_dir=args.data_dir,
-        embedding_dim=args.embedding_dim,
-        hidden_dim=args.hidden_dim,
-        dropout_rate=args.dropout_rate,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        seed=args.seed,
-        pos_weight_mode=args.pos_weight_mode,
-        denoising_prob=args.denoising_prob,
-        weight_decay=args.weight_decay,
-        early_stopping_patience=args.early_stopping_patience,
-        l2_normalize=not args.no_l2_normalize if not args.no_l2_normalize else None,
-        force_retrain=args.force,
-        verbose=True
-    )
+    # Rotear para método apropriado
+    if args.embedding_method == 'svd':
+        # Para SVD, usar embedding_factory que já tem toda a infraestrutura
+        from .embedding_factory import generate_embeddings
+        
+        generate_embeddings(
+            method='svd',
+            data_dir=args.data_dir,
+            embedding_dim=args.embedding_dim,
+            seed=args.seed,
+            force_retrain=args.force,
+            verbose=True
+        )
+    else:
+        # Autoencoder: usar função existente diretamente
+        train_and_export_embeddings(
+            data_dir=args.data_dir,
+            embedding_dim=args.embedding_dim,
+            hidden_dim=args.hidden_dim,
+            dropout_rate=args.dropout_rate,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            seed=args.seed,
+            pos_weight_mode=args.pos_weight_mode,
+            denoising_prob=args.denoising_prob,
+            weight_decay=args.weight_decay,
+            early_stopping_patience=args.early_stopping_patience,
+            l2_normalize=not args.no_l2_normalize if not args.no_l2_normalize else None,
+            force_retrain=args.force,
+            verbose=True
+        )
 
 
 if __name__ == '__main__':
