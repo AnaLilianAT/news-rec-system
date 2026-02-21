@@ -3,7 +3,7 @@
 Gera graficos do sweep dimensao x seed, um por algoritmo.
 
 Cada grafico mostra:
-- Eixo Y esquerdo: RMSE_mean + banda (std ou IC95)
+- Eixo Y esquerdo: Ranking metric (RMSE ou NDCG) mean + banda (std ou IC95)
 - Eixo Y direito: GH_mean + banda (std ou IC95)
 - Eixo X: dimensao do embedding (d)
 
@@ -24,7 +24,8 @@ def sanitize_filename(name: str) -> str:
     return name.replace(' ', '_').replace('/', '_').replace('\\', '_')
 
 
-def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_avg=None, gh_avg=None):
+def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, 
+                  ranking_avg=None, gh_avg=None, ranking_metric='rmse', ndcg_cutoff=20):
     """
     Plota resultados de um algoritmo com dois eixos Y.
     
@@ -33,8 +34,10 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_
         algorithm: Nome do algoritmo
         band_type: 'ci95', 'std', ou 'none'
         output_path: Path para salvar PNG
-        rmse_avg: Média geral do RMSE para linha tracejada (opcional)
+        ranking_avg: Média geral da métrica de ranking para linha tracejada (opcional)
         gh_avg: Média geral do GH para linha tracejada (opcional)
+        ranking_metric: 'rmse' ou 'ndcg'
+        ndcg_cutoff: Cutoff N para NDCG@N
     """
     # Ordenar por dimensao
     df_algo = df_algo.sort_values('d')
@@ -43,35 +46,48 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_
     fig, ax1 = plt.subplots(figsize=(10, 6))
     
     # Cores
-    color_rmse = '#d62728'  # vermelho
-    color_gh = '#2ca02c'    # verde
+    color_ranking = '#d62728'  # vermelho
+    color_gh = '#2ca02c'       # verde
     
-    # ===== EIXO ESQUERDO: RMSE =====
+    # Nomes de colunas dinâmicos
+    metric_col = ranking_metric
+    mean_col = f'{metric_col}_mean'
+    std_col = f'{metric_col}_std'
+    ci95_low_col = f'{metric_col}_ci95_low'
+    ci95_high_col = f'{metric_col}_ci95_high'
+    
+    # Label da métrica
+    if ranking_metric == 'ndcg':
+        metric_label = f'NDCG@{ndcg_cutoff}'
+    else:
+        metric_label = 'RMSE'
+    
+    # ===== EIXO ESQUERDO: RANKING METRIC =====
     ax1.set_xlabel('Dimensao do Embedding (d)', fontsize=12)
-    ax1.set_ylabel('RMSE', fontsize=12, color=color_rmse)
-    ax1.tick_params(axis='y', labelcolor=color_rmse)
+    ax1.set_ylabel(metric_label, fontsize=12, color=color_ranking)
+    ax1.tick_params(axis='y', labelcolor=color_ranking)
     
-    # Linha principal RMSE
-    line1 = ax1.plot(df_algo['d'], df_algo['rmse_mean'], 
-                     color=color_rmse, marker='o', linewidth=2, 
-                     markersize=6, label='RMSE')
+    # Linha principal da métrica
+    line1 = ax1.plot(df_algo['d'], df_algo[mean_col], 
+                     color=color_ranking, marker='o', linewidth=2, 
+                     markersize=6, label=metric_label)
     
-    # Linha tracejada RMSE média (se fornecida)
-    if rmse_avg is not None:
-        ax1.axhline(y=rmse_avg, color=color_rmse, linestyle='--', 
-                    linewidth=2, alpha=0.7, label='RMSE Média')
+    # Linha tracejada da média (se fornecida)
+    if ranking_avg is not None:
+        ax1.axhline(y=ranking_avg, color=color_ranking, linestyle='--', 
+                    linewidth=2, alpha=0.7, label=f'{metric_label} binary features')
     
-    # Banda RMSE
-    if band_type == 'ci95' and 'rmse_ci95_low' in df_algo.columns:
+    # Banda da métrica
+    if band_type == 'ci95' and ci95_low_col in df_algo.columns:
         ax1.fill_between(df_algo['d'], 
-                         df_algo['rmse_ci95_low'], 
-                         df_algo['rmse_ci95_high'],
-                         color=color_rmse, alpha=0.2, label='RMSE IC95')
-    elif band_type == 'std' and 'rmse_std' in df_algo.columns:
-        rmse_low = df_algo['rmse_mean'] - df_algo['rmse_std']
-        rmse_high = df_algo['rmse_mean'] + df_algo['rmse_std']
-        ax1.fill_between(df_algo['d'], rmse_low, rmse_high,
-                         color=color_rmse, alpha=0.2, label='RMSE +/- std')
+                         df_algo[ci95_low_col], 
+                         df_algo[ci95_high_col],
+                         color=color_ranking, alpha=0.2, label=f'{metric_label} IC95')
+    elif band_type == 'std' and std_col in df_algo.columns:
+        low = df_algo[mean_col] - df_algo[std_col]
+        high = df_algo[mean_col] + df_algo[std_col]
+        ax1.fill_between(df_algo['d'], low, high,
+                         color=color_ranking, alpha=0.2, label=f'{metric_label} +/- std')
     
     # ===== EIXO DIREITO: GH =====
     ax2 = ax1.twinx()
@@ -86,7 +102,7 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_
     # Linha tracejada GH média (se fornecida)
     if gh_avg is not None:
         ax2.axhline(y=gh_avg, color=color_gh, linestyle='--', 
-                    linewidth=2, alpha=0.7, label='GH Média')
+                    linewidth=2, alpha=0.7, label='GH binary features')
     
     # Banda GH
     if band_type == 'ci95' and 'gh_ci95_low' in df_algo.columns:
@@ -101,10 +117,8 @@ def plot_algorithm(df_algo, algorithm, band_type='ci95', output_path=None, rmse_
                          color=color_gh, alpha=0.2, label='GH +/- std')
     
     # ===== TITULO E LEGENDA =====
-    title = f'Algoritmo: {algorithm.upper()}'
-    if band_type != 'none':
-        title += f' (banda: {band_type.upper()})'
-    plt.title(title, fontsize=14, fontweight='bold', pad=20)
+    #title = f'Algoritmo: {algorithm.upper()}'
+    #plt.title(title, fontsize=14, fontweight='bold', pad=20)
     
     # Coletar todos os handles e labels dos dois eixos
     handles1, labels1 = ax1.get_legend_handles_labels()
@@ -172,10 +186,25 @@ def main():
     )
     
     parser.add_argument(
-        '--rmse-table',
+        '--ranking-table',
         type=str,
         default='outputs/tabela_6_3_RMSE_bin_features+bin_topics.csv',
-        help='Path da tabela CSV com médias de RMSE por algoritmo'
+        help='Path da tabela CSV com médias de ranking metric por algoritmo'
+    )
+    
+    parser.add_argument(
+        '--ranking-metric',
+        type=str,
+        choices=['rmse', 'ndcg'],
+        default='rmse',
+        help='Métrica de ranking: rmse ou ndcg (default: rmse)'
+    )
+    
+    parser.add_argument(
+        '--ndcg-cutoff',
+        type=int,
+        default=20,
+        help='Cutoff N para NDCG@N (default: 20)'
     )
     
     parser.add_argument(
@@ -194,26 +223,35 @@ def main():
         return 1
     
     # Carregar tabelas de médias
-    rmse_averages = {}
+    ranking_averages = {}
     gh_averages = {}
     
-    rmse_table_path = Path(args.rmse_table)
-    if rmse_table_path.exists():
-        print(f"[>] Carregando médias de RMSE: {rmse_table_path}")
-        df_rmse = pd.read_csv(rmse_table_path)
-        # Mapear algoritmo -> média
-        for _, row in df_rmse.iterrows():
-            algo = row['Algoritmo'].strip().lower()
-            rmse_averages[algo] = row['Média']
-        print(f"[OK] {len(rmse_averages)} médias de RMSE carregadas")
+    # Determinar coluna de ranking na tabela
+    if args.ranking_metric == 'ndcg':
+        metric_label = f'NDCG@{args.ndcg_cutoff}'
     else:
-        print(f"[!] Aviso: Tabela de RMSE não encontrada: {rmse_table_path}")
+        metric_label = 'RMSE'
+    
+    # As tabelas de RMSE e NDCG têm a mesma estrutura, coluna 'Média'
+    ranking_col_name = 'Média'
+    
+    ranking_table_path = Path(args.ranking_table)
+    if ranking_table_path.exists():
+        print(f"[>] Carregando médias de {metric_label}: {ranking_table_path}")
+        df_ranking = pd.read_csv(ranking_table_path)
+        # Mapear algoritmo -> média
+        for _, row in df_ranking.iterrows():
+            algo = row['Algoritmo'].strip().lower()
+            ranking_averages[algo] = row[ranking_col_name]
+        print(f"[OK] {len(ranking_averages)} médias de {metric_label} carregadas")
+    else:
+        print(f"[!] Aviso: Tabela de {metric_label} não encontrada: {ranking_table_path}")
     
     gh_table_path = Path(args.gh_table)
     if gh_table_path.exists():
         print(f"[>] Carregando médias de GH: {gh_table_path}")
         df_gh = pd.read_csv(gh_table_path)
-        # Mapear algoritmo -> média
+        # Mapear algoritmo -> média (coluna 'Média')
         for _, row in df_gh.iterrows():
             algo = row['Algoritmo'].strip().lower()
             gh_averages[algo] = row['Média']
@@ -256,11 +294,11 @@ def main():
         
         # Buscar médias do algoritmo
         algo_key = algorithm.strip().lower()
-        rmse_avg = rmse_averages.get(algo_key, None)
+        ranking_avg = ranking_averages.get(algo_key, None)
         gh_avg = gh_averages.get(algo_key, None)
         
-        if rmse_avg is not None:
-            print(f"  -> RMSE média: {rmse_avg:.3f}")
+        if ranking_avg is not None:
+            print(f"  -> {metric_label} média: {ranking_avg:.3f}")
         if gh_avg is not None:
             print(f"  -> GH média: {gh_avg:.3f}")
         
@@ -271,7 +309,8 @@ def main():
             output_path = output_dir / filename
         
         try:
-            plot_algorithm(df_algo, algorithm, args.band, output_path, rmse_avg, gh_avg)
+            plot_algorithm(df_algo, algorithm, args.band, output_path, 
+                          ranking_avg, gh_avg, args.ranking_metric, args.ndcg_cutoff)
         except Exception as e:
             print(f"[X] Erro ao plotar {algorithm}: {e}")
             continue

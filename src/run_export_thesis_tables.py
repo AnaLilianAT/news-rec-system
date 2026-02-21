@@ -20,8 +20,13 @@ from . import format_like_thesis
 normalize_algorithm_name = format_like_thesis.normalize_algorithm_name
 compute_GH_interaction_jaccard = format_like_thesis.compute_GH_interaction_jaccard
 compute_GH_lists_cosine = format_like_thesis.compute_GH_lists_cosine
+compute_GH_lists_cosine_global = format_like_thesis.compute_GH_lists_cosine_global
 compute_RMSE_user = format_like_thesis.compute_RMSE_user
+compute_RMSE_global = format_like_thesis.compute_RMSE_global
+compute_NDCG_user = format_like_thesis.compute_NDCG_user
+compute_NDCG_global = format_like_thesis.compute_NDCG_global
 aggregate_like_thesis = format_like_thesis.aggregate_like_thesis
+aggregate_global = format_like_thesis.aggregate_global
 format_table_for_export = format_like_thesis.format_table_for_export
 
 
@@ -29,7 +34,10 @@ def process_representation(
     outputs_dir: Path,
     representation_suffix: str = None,
     representation_label: str = None,
-    embedding_dim: int = None
+    embedding_dim: int = None,
+    aggregate_by_user: bool = True,
+    ranking_metric: str = 'rmse',
+    ndcg_cutoff: int = 20
 ):
     """
     Processa uma representação e gera tabelas no formato da tese.
@@ -39,6 +47,7 @@ def process_representation(
         representation_suffix: Sufixo dos arquivos (ex: 'ae_features+ae_topics')
         representation_label: Label para display (ex: 'ae_features+ae_topics')
         embedding_dim: Dimensão do embedding (opcional, para incluir no nome do arquivo)
+        aggregate_by_user: Se True, agrega por usuário primeiro; se False, agrega globalmente
     
     Returns:
         0 se sucesso, 1 se erro
@@ -170,23 +179,50 @@ def process_representation(
     print("TABELA 6.6: GH (Cosseno) - Listas de Recomendação")
     print("=" * 80)
     
-    print("Calculando GH por lista usando cosseno entre features...")
-    df_gh_lists = compute_GH_lists_cosine(reclists, features)
+    if aggregate_by_user:
+        print("Calculando GH por usuário usando cosseno entre features...")
+        df_gh_lists = compute_GH_lists_cosine(reclists, features)
+    else:
+        print("Calculando GH global usando cosseno entre features...")
+        # Primeiro calcula por usuário, depois agrega por algoritmo
+        df_gh_lists_per_user = compute_GH_lists_cosine(reclists, features)
+        
+        # Agregar por algoritmo (global)
+        results = []
+        for algorithm, group in df_gh_lists_per_user.groupby('algorithm'):
+            # Média ponderada pelo número de listas de cada usuário
+            total_lists = group['n_lists'].sum()
+            weighted_gh = (group['gh_cosine_lists'] * group['n_lists']).sum() / total_lists
+            results.append({
+                'algorithm': algorithm,
+                'gh_cosine_lists': weighted_gh,
+                'n_lists': int(total_lists)
+            })
+        df_gh_lists = pd.DataFrame(results)
     
     if len(df_gh_lists) == 0:
         print("AVISO: Nenhuma lista com >= 2 itens para calcular GH (listas)")
         report_lines.append("## Tabela 6.6: GH (Cosseno - Listas)\n")
         report_lines.append("Nenhum dado disponível\n")
     else:
-        print(f"  - {len(df_gh_lists)} usuários com GH calculado")
-        
-        # Estatísticas por algoritmo
-        table_6_6 = aggregate_like_thesis(
-            df_gh_lists,
-            metric_col='gh_cosine_lists',
-            include_users=True,
-            include_minmax=False
-        )
+        if aggregate_by_user:
+            print(f"  - {len(df_gh_lists)} usuários com GH calculado")
+            
+            # Estatísticas por algoritmo (com coluna Usuários)
+            table_6_6 = aggregate_like_thesis(
+                df_gh_lists,
+                metric_col='gh_cosine_lists',
+                include_users=True,
+                include_minmax=False
+            )
+        else:
+            print(f"  - GH global calculado para {len(df_gh_lists)} algoritmos")
+            
+            # Formatação global
+            table_6_6 = aggregate_global(
+                df_gh_lists,
+                metric_col='gh_cosine_lists'
+            )
         
         # Formatar e exportar
         table_6_6_formatted = format_table_for_export(table_6_6, decimal_places=3)
@@ -200,47 +236,94 @@ def process_representation(
         # Adicionar ao relatório
         report_lines.append("## Tabela 6.6: GH (Cosseno - Listas)\n")
         report_lines.append(f"Arquivo: `{output_path_6_6.name}`\n")
-        report_lines.append("### Usuários por algoritmo:\n")
-        for _, row in table_6_6.iterrows():
-            algo = row['Algoritmo']
-            n_users = int(row['Usuários'])
-            report_lines.append(f"- **{algo}**: {n_users} usuários")
         
-        # Exclusões
-        total_lists = len(reclists)
-        total_users_lists = reclists['user_id'].nunique()
-        included_users_lists = len(df_gh_lists)
-        excluded_lists = total_users_lists - included_users_lists
-        report_lines.append(f"\n**Usuários excluídos**: {excluded_lists} (listas com < 2 itens válidos)\n")
+        if aggregate_by_user and 'Usuários' in table_6_6.columns:
+            report_lines.append("### Usuários por algoritmo:\n")
+            for _, row in table_6_6.iterrows():
+                algo = row['Algoritmo']
+                n_users = int(row['Usuários'])
+                report_lines.append(f"- **{algo}**: {n_users} usuários")
+            
+            # Exclusões
+            total_lists = len(reclists)
+            total_users_lists = reclists['user_id'].nunique()
+            included_users_lists = len(df_gh_lists)
+            excluded_lists = total_users_lists - included_users_lists
+            report_lines.append(f"\n**Usuários excluídos**: {excluded_lists} (listas com < 2 itens válidos)\n")
+        else:
+            report_lines.append("### Agregação global:\n")
+            for _, row in table_6_6.iterrows():
+                algo = row['Algoritmo']
+                n_lists = int(row['N Listas'])
+                report_lines.append(f"- **{algo}**: {n_lists} listas")
     
     # ========================================================================
-    # TABELA 6.3: RMSE
+    # TABELA 6.3: RMSE ou NDCG@N
     # ========================================================================
     print("\n" + "=" * 80)
-    print("TABELA 6.3: RMSE")
+    if ranking_metric == 'rmse':
+        print("TABELA 6.3: RMSE")
+        metric_label = "RMSE"
+        metric_col = 'rmse'
+        count_col = 'N Pares'
+    else:  # ndcg
+        print(f"TABELA 6.3: NDCG@{ndcg_cutoff}")
+        metric_label = f"NDCG@{ndcg_cutoff}"
+        metric_col = 'ndcg'
+        count_col = 'N Usuários'
     print("=" * 80)
     
-    print("Calculando RMSE por usuário...")
-    df_rmse = compute_RMSE_user(eval_pairs)
+    if ranking_metric == 'rmse':
+        if aggregate_by_user:
+            print("Modo: Agregação por usuário")
+            print("Calculando RMSE por usuário...")
+            df_ranking = compute_RMSE_user(eval_pairs)
+        else:
+            print("Modo: Agregação global")
+            print("Calculando RMSE global...")
+            df_ranking = compute_RMSE_global(eval_pairs)
+    else:  # ndcg
+        if aggregate_by_user:
+            print("Modo: Agregação por usuário")
+            print(f"Calculando NDCG@{ndcg_cutoff} por usuário...")
+            df_ranking = compute_NDCG_user(reclists, eval_pairs, N=ndcg_cutoff)
+        else:
+            print("Modo: Agregação global")
+            print(f"Calculando NDCG@{ndcg_cutoff} global...")
+            df_ranking = compute_NDCG_global(reclists, eval_pairs, N=ndcg_cutoff)
     
-    if len(df_rmse) == 0:
-        print("AVISO: Nenhum usuário com >= 2 pares para calcular RMSE")
-        report_lines.append("## Tabela 6.3: RMSE\n")
+    if len(df_ranking) == 0:
+        report_lines.append(f"## Tabela 6.3: {metric_label}\n")
         report_lines.append("Nenhum dado disponível\n")
     else:
-        print(f"  - {len(df_rmse)} usuários com RMSE calculado")
-        
-        # Estatísticas por algoritmo (sem coluna Usuários, com Min/Max)
-        table_6_3 = aggregate_like_thesis(
-            df_rmse,
-            metric_col='rmse',
-            include_users=False,
-            include_minmax=True
-        )
+        if aggregate_by_user:
+            print(f"  - {len(df_ranking)} usuários com {metric_label} calculado")
+            
+            # Estatísticas por algoritmo (sem coluna Usuários, com Min/Max)
+            table_6_3 = aggregate_like_thesis(
+                df_ranking,
+                metric_col=metric_col,
+                include_users=False,
+                include_minmax=True
+            )
+        else:
+            print(f"  - {metric_label} global calculado para {len(df_ranking)} algoritmos")
+            
+            # Formatação global
+            table_6_3 = aggregate_global(
+                df_ranking,
+                metric_col=metric_col
+            )
         
         # Formatar e exportar
         table_6_3_formatted = format_table_for_export(table_6_3, decimal_places=3)
-        output_path_6_3 = tables_dir / f"tabela_6_3_RMSE{output_suffix}.csv"
+        
+        # Nome do arquivo depende da métrica
+        if ranking_metric == 'rmse':
+            output_path_6_3 = tables_dir / f"tabela_6_3_RMSE{output_suffix}.csv"
+        else:
+            output_path_6_3 = tables_dir / f"tabela_6_3_NDCG@{ndcg_cutoff}{output_suffix}.csv"
+        
         table_6_3_formatted.to_csv(output_path_6_3, index=False)
         
         print(f"\nTabela salva em: {output_path_6_3}")
@@ -248,19 +331,38 @@ def process_representation(
         print(table_6_3_formatted.to_string(index=False))
         
         # Adicionar ao relatório
-        report_lines.append("## Tabela 6.3: RMSE\n")
+        report_lines.append(f"## Tabela 6.3: {metric_label}\n")
         report_lines.append(f"Arquivo: `{output_path_6_3.name}`\n")
-        report_lines.append("### Usuários por algoritmo:\n")
-        for algo in df_rmse['algorithm'].unique():
-            n_users = len(df_rmse[df_rmse['algorithm'] == algo])
-            algo_normalized = normalize_algorithm_name(algo)
-            report_lines.append(f"- **{algo_normalized}**: {n_users} usuários")
         
-        # Exclusões
-        total_users_rmse = eval_pairs['user_id'].nunique()
-        included_users_rmse = len(df_rmse)
-        excluded_rmse = total_users_rmse - included_users_rmse
-        report_lines.append(f"\n**Usuários excluídos**: {excluded_rmse} (< 2 pares de avaliação)\n")
+        if aggregate_by_user:
+            report_lines.append("### Usuários por algoritmo:\n")
+            for algo in df_ranking['algorithm'].unique():
+                n_users = len(df_ranking[df_ranking['algorithm'] == algo])
+                algo_normalized = normalize_algorithm_name(algo)
+                report_lines.append(f"- **{algo_normalized}**: {n_users} usuários")
+            
+            # Exclusões
+            if ranking_metric == 'rmse':
+                total_users = eval_pairs['user_id'].nunique()
+                included_users = len(df_ranking)
+                excluded = total_users - included_users
+                report_lines.append(f"\n**Usuários excluídos**: {excluded} (< 2 pares de avaliação)\n")
+            else:  # ndcg
+                # Para NDCG, os usuários excluídos são aqueles sem itens avaliáveis
+                total_users = reclists['user_id'].nunique()
+                included_users = len(df_ranking)
+                excluded = total_users - included_users
+                report_lines.append(f"\n**Usuários excluídos**: {excluded} (sem itens avaliáveis)\n")
+        else:
+            report_lines.append("### Agregação global:\n")
+            for _, row in df_ranking.iterrows():
+                algo = normalize_algorithm_name(row['algorithm'])
+                if ranking_metric == 'rmse':
+                    n_items = int(row['n_pairs'])
+                    report_lines.append(f"- **{algo}**: {n_items} pares")
+                else:  # ndcg
+                    n_users = int(row['n_users'])
+                    report_lines.append(f"- **{algo}**: {n_users} usuários")
     
     # ========================================================================
     # DESABILITADO: Relatório não é mais gerado
@@ -308,11 +410,40 @@ def main():
         type=int,
         help='Dimensão do embedding (incluída no nome dos arquivos)'
     )
+    parser.add_argument(
+        '--aggregate-by-user',
+        action='store_true',
+        default=True,
+        help='Agregar métricas por usuário antes de agregar por algoritmo (default: True)'
+    )
+    parser.add_argument(
+        '--global-aggregation',
+        action='store_true',
+        help='Usar agregação global (sem passar por usuário). Equivalente a --no-aggregate-by-user'
+    )
+    parser.add_argument(
+        '--ranking-metric',
+        type=str,
+        choices=['rmse', 'ndcg'],
+        default='rmse',
+        help='Métrica de ranking a processar: rmse ou ndcg (default: rmse)'
+    )
+    parser.add_argument(
+        '--ndcg-cutoff',
+        type=int,
+        default=20,
+        help='Cutoff N para NDCG@N (default: 20)'
+    )
     
     args = parser.parse_args()
     
+    # Determinar modo de agregação
+    aggregate_by_user = not args.global_aggregation if hasattr(args, 'global_aggregation') else args.aggregate_by_user
+    
     print("=" * 80)
     print("GERAÇÃO DE TABELAS NO FORMATO DA TESE")
+    print("=" * 80)
+    print(f"Modo de agregação: {'Por usuário' if aggregate_by_user else 'Global'}")
     print("=" * 80)
     
     outputs_dir = Path(args.output_dir)
@@ -356,7 +487,10 @@ def main():
             outputs_dir=outputs_dir,
             representation_suffix=suffix,
             representation_label=label,
-            embedding_dim=args.embedding_dim
+            embedding_dim=args.embedding_dim,
+            aggregate_by_user=aggregate_by_user,
+            ranking_metric=args.ranking_metric,
+            ndcg_cutoff=args.ndcg_cutoff
         )
         
         if result == 0:

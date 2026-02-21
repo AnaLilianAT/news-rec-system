@@ -1,0 +1,17 @@
+{
+  "cache_key": "d48_seed719958201_svd",
+  "method": "truncated_svd",
+  "n_components": 48,
+  "random_state": 719958201,
+  "n_iter": 5,
+  "normalize_l2": true,
+  "shape": [
+    1938,
+    50
+  ],
+  "continuous_cols": [
+    "polaridade",
+    "subjetividade"
+  ],
+  "representation_type": "svd_features"
+}

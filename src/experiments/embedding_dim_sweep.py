@@ -31,6 +31,13 @@ import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Optional
 import warnings
+
+# Adicionar diretório raiz ao sys.path para permitir execução direta
+if __name__ == '__main__':
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
+
 warnings.filterwarnings('ignore')
 
 
@@ -469,7 +476,7 @@ def main():
         print("="*70)
         
         try:
-            from .plot_embedding_dim_sweep import generate_plots
+            from src.experiments.plot_embedding_dim_sweep import generate_plots
             
             plots_dir = 'outputs/plots/embedding_dim_sweep'
             print(f"\nImportando módulo de visualização...")

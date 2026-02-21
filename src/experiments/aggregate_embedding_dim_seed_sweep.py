@@ -5,7 +5,7 @@ Agrega resultados do sweep dimensao x seed por (d, algorithm).
 Entrada: outputs/experiments/embedding_dim_seed_sweep_runs.parquet
 Saida: outputs/experiments/embedding_dim_seed_sweep_agg.parquet
 
-Calcula media, std e IC95 para RMSE e GH por (d, algorithm).
+Calcula media, std e IC95 para ranking metric (RMSE ou NDCG) e GH por (d, algorithm).
 IC95 = mean +/- 1.96 * (std / sqrt(n))
 """
 
@@ -51,15 +51,26 @@ def aggregate_sweep_results(df_runs: pd.DataFrame, expected_n_seeds: int = 20) -
     print(f"    Dimensoes: {sorted(df_runs['d'].unique())}")
     print(f"    Algoritmos: {sorted(df_runs['algorithm'].unique())}")
     
+    # Detectar coluna de ranking metric
+    if 'rmse' in df_runs.columns:
+        ranking_col = 'rmse'
+        print(f"    Métrica de ranking: RMSE")
+    elif 'ndcg' in df_runs.columns:
+        ranking_col = 'ndcg'
+        print(f"    Métrica de ranking: NDCG")
+    else:
+        raise ValueError("DataFrame deve conter coluna 'rmse' ou 'ndcg'")
+    
     # Agrupa por (d, algorithm)
     agg_stats = df_runs.groupby(['d', 'algorithm']).agg({
         'seed': 'count',  # n_seeds
-        'rmse': ['mean', 'std'],
+        ranking_col: ['mean', 'std'],
         'gh_list': ['mean', 'std']
     }).reset_index()
     
     # Flatten column names
-    agg_stats.columns = ['d', 'algorithm', 'n_seeds', 'rmse_mean', 'rmse_std', 
+    agg_stats.columns = ['d', 'algorithm', 'n_seeds', 
+                         f'{ranking_col}_mean', f'{ranking_col}_std', 
                          'gh_mean', 'gh_std']
     
     # Validar n_seeds
@@ -71,13 +82,13 @@ def aggregate_sweep_results(df_runs: pd.DataFrame, expected_n_seeds: int = 20) -
         for _, row in invalid_seeds.iterrows():
             print(f"    d={int(row['d'])}, algorithm={row['algorithm']}: n_seeds={int(row['n_seeds'])}")
     
-    # Calcular IC95 para RMSE
+    # Calcular IC95 para ranking metric
     ci95_results = agg_stats.apply(
-        lambda row: calculate_ci95(row['rmse_mean'], row['rmse_std'], row['n_seeds']),
+        lambda row: calculate_ci95(row[f'{ranking_col}_mean'], row[f'{ranking_col}_std'], row['n_seeds']),
         axis=1
     )
-    agg_stats['rmse_ci95_low'] = [x[0] for x in ci95_results]
-    agg_stats['rmse_ci95_high'] = [x[1] for x in ci95_results]
+    agg_stats[f'{ranking_col}_ci95_low'] = [x[0] for x in ci95_results]
+    agg_stats[f'{ranking_col}_ci95_high'] = [x[1] for x in ci95_results]
     
     # Calcular IC95 para GH
     ci95_results_gh = agg_stats.apply(
@@ -90,7 +101,7 @@ def aggregate_sweep_results(df_runs: pd.DataFrame, expected_n_seeds: int = 20) -
     # Reordenar colunas
     agg_stats = agg_stats[[
         'd', 'algorithm', 'n_seeds',
-        'rmse_mean', 'rmse_std', 'rmse_ci95_low', 'rmse_ci95_high',
+        f'{ranking_col}_mean', f'{ranking_col}_std', f'{ranking_col}_ci95_low', f'{ranking_col}_ci95_high',
         'gh_mean', 'gh_std', 'gh_ci95_low', 'gh_ci95_high'
     ]]
     
@@ -113,30 +124,56 @@ def print_summary(df_agg: pd.DataFrame):
     print(f"\nDistribuicao de n_seeds:")
     print(df_agg['n_seeds'].value_counts().sort_index())
     
-    # Melhor algoritmo por dimensao (menor RMSE medio)
+    # Detectar métrica (RMSE ou NDCG)
+    if 'rmse_mean' in df_agg.columns:
+        metric_col = 'rmse'
+        metric_label = 'RMSE'
+        minimize = True
+    elif 'ndcg_mean' in df_agg.columns:
+        metric_col = 'ndcg'
+        metric_label = 'NDCG'
+        minimize = False
+    else:
+        print("[!] Nenhuma métrica de ranking encontrada")
+        return
+    
+    mean_col = f'{metric_col}_mean'
+    std_col = f'{metric_col}_std'
+    ci95_low_col = f'{metric_col}_ci95_low'
+    ci95_high_col = f'{metric_col}_ci95_high'
+    
+    # Melhor algoritmo por dimensao
     print(f"\n{'-'*70}")
-    print("MELHOR ALGORITMO POR DIMENSAO (menor RMSE medio)")
+    if minimize:
+        print(f"MELHOR ALGORITMO POR DIMENSAO (menor {metric_label} medio)")
+    else:
+        print(f"MELHOR ALGORITMO POR DIMENSAO (maior {metric_label} medio)")
     print(f"{'-'*70}")
     
-    best_per_dim = df_agg.loc[df_agg.groupby('d')['rmse_mean'].idxmin()]
+    if minimize:
+        best_per_dim = df_agg.loc[df_agg.groupby('d')[mean_col].idxmin()]
+    else:
+        best_per_dim = df_agg.loc[df_agg.groupby('d')[mean_col].idxmax()]
+    
     for _, row in best_per_dim.iterrows():
         print(f"d={int(row['d']):2d}: {row['algorithm']:<12} "
-              f"RMSE={row['rmse_mean']:.4f} +/- {row['rmse_std']:.4f} "
-              f"(CI95: [{row['rmse_ci95_low']:.4f}, {row['rmse_ci95_high']:.4f}])")
+              f"{metric_label}={row[mean_col]:.4f} +/- {row[std_col]:.4f} "
+              f"(CI95: [{row[ci95_low_col]:.4f}, {row[ci95_high_col]:.4f}])")
     
     # Algoritmos mais estaveis (menor CV)
     print(f"\n{'-'*70}")
-    print("ALGORITMOS MAIS ESTAVEIS (menor CV do RMSE)")
+    print(f"ALGORITMOS MAIS ESTAVEIS (menor CV do {metric_label})")
     print(f"{'-'*70}")
     
     df_agg_cv = df_agg.copy()
-    df_agg_cv['rmse_cv'] = df_agg_cv['rmse_std'] / df_agg_cv['rmse_mean']
-    most_stable = df_agg_cv.nsmallest(5, 'rmse_cv')
+    cv_col = f'{metric_col}_cv'
+    df_agg_cv[cv_col] = df_agg_cv[std_col] / df_agg_cv[mean_col]
+    most_stable = df_agg_cv.nsmallest(5, cv_col)
     
     for _, row in most_stable.iterrows():
-        cv_pct = row['rmse_cv'] * 100
+        cv_pct = row[cv_col] * 100
         print(f"d={int(row['d']):2d}, {row['algorithm']:<12}: "
-              f"RMSE={row['rmse_mean']:.4f} +/- {row['rmse_std']:.4f} "
+              f"{metric_label}={row[mean_col]:.4f} +/- {row[std_col]:.4f} "
               f"(CV={cv_pct:.2f}%)")
 
 
@@ -190,7 +227,15 @@ def main():
     print(f"[OK] {len(df_runs)} runs carregadas")
     
     # Validar colunas necessarias
-    required_cols = ['d', 'algorithm', 'seed', 'rmse', 'gh_list']
+    required_cols = ['d', 'algorithm', 'seed', 'gh_list']
+    if 'rmse' not in df_runs.columns and 'ndcg' not in df_runs.columns:
+        print(f"[X] Erro: DataFrame deve conter coluna 'rmse' ou 'ndcg'")
+        return 1
+    
+    # Detectar coluna de ranking
+    ranking_col = 'rmse' if 'rmse' in df_runs.columns else 'ndcg'
+    required_cols.append(ranking_col)
+    
     missing_cols = [col for col in required_cols if col not in df_runs.columns]
     if missing_cols:
         print(f"[X] Erro: Colunas ausentes: {missing_cols}")
@@ -217,10 +262,21 @@ def main():
     print(" ESTATISTICAS FINAIS")
     print("="*70)
     
-    print(f"\nRMSE:")
-    print(f"  Media global: {df_agg['rmse_mean'].mean():.4f}")
-    print(f"  Melhor (min): {df_agg['rmse_mean'].min():.4f}")
-    print(f"  Pior (max): {df_agg['rmse_mean'].max():.4f}")
+    # Detectar coluna de ranking
+    if 'rmse_mean' in df_agg.columns:
+        ranking_col = 'rmse'
+        metric_label = 'RMSE'
+        print(f"\n{metric_label}:")
+        print(f"  Media global: {df_agg[f'{ranking_col}_mean'].mean():.4f}")
+        print(f"  Melhor (min): {df_agg[f'{ranking_col}_mean'].min():.4f}")
+        print(f"  Pior (max): {df_agg[f'{ranking_col}_mean'].max():.4f}")
+    elif 'ndcg_mean' in df_agg.columns:
+        ranking_col = 'ndcg'
+        metric_label = 'NDCG'
+        print(f"\n{metric_label}:")
+        print(f"  Media global: {df_agg[f'{ranking_col}_mean'].mean():.4f}")
+        print(f"  Melhor (max): {df_agg[f'{ranking_col}_mean'].max():.4f}")
+        print(f"  Pior (min): {df_agg[f'{ranking_col}_mean'].min():.4f}")
     
     print(f"\nGH (diversidade):")
     print(f"  Media global: {df_agg['gh_mean'].mean():.4f}")

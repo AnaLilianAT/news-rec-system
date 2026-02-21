@@ -24,10 +24,17 @@ from typing import List, Tuple, Optional, Set
 from datetime import datetime
 import warnings
 import json
+
+# Adicionar diretório raiz ao sys.path para permitir execução direta
+if __name__ == '__main__':
+    root_dir = Path(__file__).resolve().parent.parent.parent
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
+
 warnings.filterwarnings('ignore')
 
-from ..utils.dim_grid import build_dims, compute_d_min_heuristic
-from .seed_utils import load_or_create_seeds
+from src.utils.dim_grid import build_dims, compute_d_min_heuristic
+from src.experiments.seed_utils import load_or_create_seeds
 
 
 def train_embedding(d: int, seed: int, method: str = 'ae', force: bool = False) -> Tuple[bool, str, str]:
@@ -36,7 +43,7 @@ def train_embedding(d: int, seed: int, method: str = 'ae', force: bool = False) 
     print(f"  EMBEDDINGS: método={method.upper()}, d={d}, seed={seed}")
     print(f"{'-'*70}")
     
-    from ..embeddings.cache_utils import find_cached_embedding
+    from src.embeddings.cache_utils import find_cached_embedding
     
     if not force:
         rep_type = f'{method}_features'
@@ -82,10 +89,12 @@ def train_embedding(d: int, seed: int, method: str = 'ae', force: bool = False) 
         return False, f"Erro d={d}, seed={seed}, {method}", ""
 
 
-def run_pipeline(d: int, seed: int, method: str = 'ae') -> Tuple[bool, str]:
+def run_pipeline(d: int, seed: int, method: str = 'ae', aggregate_by_user: bool = True, ranking_metric: str = 'rmse', ndcg_cutoff: int = 20) -> Tuple[bool, str]:
     """Roda pipeline completo para (d, seed)."""
     print(f"\n{'-'*70}")
     print(f"  PIPELINE: método={method.upper()}, d={d}, seed={seed}")
+    print(f"  Agregação: {'Por usuário' if aggregate_by_user else 'Global'}")
+    print(f"  Métrica de ranking: {ranking_metric.upper()}")
     print(f"{'-'*70}")
     
     feature_rep = f'{method}_features'
@@ -111,7 +120,11 @@ def run_pipeline(d: int, seed: int, method: str = 'ae') -> Tuple[bool, str]:
     cmd2 = [sys.executable, '-m', 'src.run_eval_replay_assigned',
             '--representations', rep_suffix,
             '--embedding-dim', str(d),
-            '--seed', str(seed)]
+            '--seed', str(seed),
+            '--ranking-metric', ranking_metric]
+    
+    if ranking_metric == 'ndcg':
+        cmd2.extend(['--ndcg-cutoff', str(ndcg_cutoff)])
     
     result = subprocess.run(cmd2, cwd=Path.cwd())
     if result.returncode == 0:
@@ -123,7 +136,15 @@ def run_pipeline(d: int, seed: int, method: str = 'ae') -> Tuple[bool, str]:
     # 3. Export
     print("[>] [3/3] Exportando tabelas...")
     cmd3 = [sys.executable, '-m', 'src.run_export_thesis_tables',
-            '--embedding-dim', str(d)]
+            '--embedding-dim', str(d),
+            '--ranking-metric', ranking_metric]
+    
+    if ranking_metric == 'ndcg':
+        cmd3.extend(['--ndcg-cutoff', str(ndcg_cutoff)])
+    
+    # Adicionar flag de agregação
+    if not aggregate_by_user:
+        cmd3.append('--global-aggregation')
     
     result = subprocess.run(cmd3, cwd=Path.cwd())
     if result.returncode == 0:
@@ -136,37 +157,60 @@ def run_pipeline(d: int, seed: int, method: str = 'ae') -> Tuple[bool, str]:
     return True, f"OK d={d}, seed={seed}"  
 
 
-def collect_metrics(d: int, seed: int, method: str, cache_key: str) -> Optional[pd.DataFrame]:
-    """Coleta metricas RMSE e GH."""
+def collect_metrics(d: int, seed: int, method: str, cache_key: str, ranking_metric: str = 'rmse', ndcg_cutoff: int = 20) -> Optional[pd.DataFrame]:
+    """Coleta metricas de ranking (RMSE ou NDCG) e GH."""
     print(f"[>] Coletando metricas...")
     
     tables_dir = Path('outputs/tabelas')
     suffix = f'{method}_features+{method}_topics_dim{d}'
     
-    rmse_path = tables_dir / f'tabela_6_3_RMSE_{suffix}.csv'
+    # Determinar nome do arquivo de ranking baseado na métrica
+    if ranking_metric == 'rmse':
+        ranking_path = tables_dir / f'tabela_6_3_RMSE_{suffix}.csv'
+        ranking_col_user = 'Média'
+        ranking_col_global = 'RMSE'
+    else:  # ndcg
+        ranking_path = tables_dir / f'tabela_6_3_NDCG@{ndcg_cutoff}_{suffix}.csv'
+        ranking_col_user = 'Média'
+        ranking_col_global = 'NDCG'
+    
     gh_path = tables_dir / f'tabela_6_6_GH_listas_{suffix}.csv'
     
-    if not rmse_path.exists() or not gh_path.exists():
+    if not ranking_path.exists() or not gh_path.exists():
         print(f"[X] Arquivos nao encontrados")
         return None
     
-    df_rmse = pd.read_csv(rmse_path)
+    df_ranking = pd.read_csv(ranking_path)
     df_gh = pd.read_csv(gh_path)
     
-    df_merged = df_rmse[['Algoritmo', 'Média']].merge(
-        df_gh[['Algoritmo', 'Média']], on='Algoritmo', suffixes=('_rmse', '_gh')
-    )
-    
-    df_merged = df_merged.rename(columns={
-        'Algoritmo': 'algorithm', 'Média_rmse': 'rmse', 'Média_gh': 'gh_list'
-    })
+    # Detectar se é agregação por usuário (tem 'Média') ou global (tem métrica direto)
+    if ranking_col_user in df_ranking.columns:
+        # Modo: agregação por usuário
+        df_merged = df_ranking[['Algoritmo', ranking_col_user]].merge(
+            df_gh[['Algoritmo', 'Média']], on='Algoritmo', suffixes=('_rank', '_gh')
+        )
+        df_merged = df_merged.rename(columns={
+            'Algoritmo': 'algorithm', 
+            f'{ranking_col_user}_rank': ranking_metric, 
+            f'{ranking_col_user}_gh': 'gh_list'
+        })
+    else:
+        # Modo: agregação global
+        df_merged = df_ranking[['Algoritmo', ranking_col_global]].merge(
+            df_gh[['Algoritmo', 'GH_COSINE_LISTS']], on='Algoritmo'
+        )
+        df_merged = df_merged.rename(columns={
+            'Algoritmo': 'algorithm', 
+            ranking_col_global: ranking_metric, 
+            'GH_COSINE_LISTS': 'gh_list'
+        })
     
     df_merged['d'] = d
     df_merged['seed'] = seed
     df_merged['embedding_cache_key'] = cache_key
     df_merged['timestamp'] = datetime.now().isoformat()
     
-    df_merged = df_merged[['d', 'seed', 'algorithm', 'rmse', 'gh_list', 
+    df_merged = df_merged[['d', 'seed', 'algorithm', ranking_metric, 'gh_list', 
                            'embedding_cache_key', 'timestamp']]
     
     print(f"[OK] {len(df_merged)} algoritmos coletados")
@@ -216,6 +260,12 @@ def main():
                        default='outputs/experiments/embedding_dim_seed_sweep_runs.parquet')
     parser.add_argument('--embedding-method', type=str, choices=['ae', 'svd'],
                        default='svd', help='Método de embedding: ae ou svd (default: svd)')
+    parser.add_argument('--global-aggregation', action='store_true',
+                       help='Usar agregação global (sem passar por usuário) para RMSE e GH')
+    parser.add_argument('--ranking-metric', type=str, choices=['rmse', 'ndcg'],
+                       default='rmse', help='Métrica de ranking: rmse ou ndcg (default: rmse)')
+    parser.add_argument('--ndcg-cutoff', type=int, default=20,
+                       help='Cutoff N para NDCG@N (default: 20)')
     
     args = parser.parse_args()
     use_resume = args.resume and not args.no_resume
@@ -225,6 +275,10 @@ def main():
     print("="*70)
     print(f"\nMétodo de embedding: {args.embedding_method.upper()}")
     print(f"  {'Autoencoder' if args.embedding_method == 'ae' else 'Truncated SVD'}")
+    print(f"\nMétrica de ranking: {args.ranking_metric.upper()}")
+    if args.ranking_metric == 'ndcg':
+        print(f"  NDCG@{args.ndcg_cutoff}")
+    print(f"\nAgregação: {'Global' if args.global_aggregation else 'Por usuário e depois por algoritmo'}")
     
     # 1. Dimensoes
     if args.dims:
@@ -232,7 +286,7 @@ def main():
         print(f"\n[>] Dimensoes: {dims}")
     else:
         if args.d_bin is None:
-            from .embedding_dim_sweep import get_binary_dim
+            from src.experiments.embedding_dim_sweep import get_binary_dim
             d_bin = get_binary_dim()
         else:
             d_bin = args.d_bin
@@ -290,13 +344,18 @@ def main():
                 continue
             
             # Pipeline
-            success_pipe, _ = run_pipeline(d, seed, args.embedding_method)
+            success_pipe, _ = run_pipeline(d, seed, args.embedding_method, 
+                                          aggregate_by_user=not args.global_aggregation,
+                                          ranking_metric=args.ranking_metric,
+                                          ndcg_cutoff=args.ndcg_cutoff)
             if not success_pipe:
                 fail_count += 1
                 continue
             
             # Metrics
-            df_metrics = collect_metrics(d, seed, args.embedding_method, cache_key)
+            df_metrics = collect_metrics(d, seed, args.embedding_method, cache_key,
+                                        ranking_metric=args.ranking_metric,
+                                        ndcg_cutoff=args.ndcg_cutoff)
             if df_metrics is None:
                 fail_count += 1
                 continue

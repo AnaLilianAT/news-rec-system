@@ -326,6 +326,93 @@ def _compute_GH_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFra
     return pd.DataFrame(results)
 
 
+def compute_GH_lists_cosine_global(
+    reclists: pd.DataFrame,
+    features: pd.DataFrame,
+    output_dir: Path = Path('outputs'),
+    representation_type: str = 'bin_features'
+) -> pd.DataFrame:
+    """
+    Calcula GH (cosseno) global por algoritmo (sem agregar por usuário primeiro).
+    
+    Args:
+        reclists: DataFrame de listas de recomendação
+        features: DataFrame de features
+        output_dir: Diretório de outputs (para futura extensão)
+        representation_type: Tipo de representação
+    
+    Returns:
+        DataFrame com colunas: [algorithm, gh_cosine_lists, n_lists]
+    """
+    if representation_type == 'bin_features':
+        return _compute_GH_lists_cosine_global_legacy(reclists, features)
+    else:
+        raise ValueError(
+            f"Representação não suportada: '{representation_type}'. "
+            f"Use 'bin_features'"
+        )
+
+
+def _compute_GH_lists_cosine_global_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+    """
+    Implementação global de GH com cosseno sobre features binárias.
+    
+    Agrega diretamente por algoritmo sem passar por usuário.
+    
+    Returns:
+        DataFrame com colunas: [algorithm, gh_cosine_lists, n_lists]
+    """
+    # Preparar features como vetores
+    features_dict = {}
+    feature_cols = [c for c in features.columns if c not in ['news_id']]
+    
+    for _, row in features.iterrows():
+        item_id = row['news_id']
+        vec = row[feature_cols].values.astype(float)
+        features_dict[item_id] = vec
+    
+    # Agrupar por (user_id, t_rec, algorithm) para formar cada lista
+    list_results = []
+    for (user_id, t_rec, algorithm), group in reclists.groupby(['user_id', 't_rec', 'algorithm']):
+        items = group['news_id'].tolist()
+        
+        items = [item for item in items if item in features_dict]
+        
+        if len(items) < 2:
+            continue
+        
+        # Calcular cosseno entre todos os pares
+        cosines = []
+        for item_a, item_b in combinations(items, 2):
+            vec_a = features_dict[item_a]
+            vec_b = features_dict[item_b]
+            cos = compute_cosine_similarity(vec_a, vec_b)
+            cosines.append(cos)
+        
+        if len(cosines) > 0:
+            gh_list = np.mean(cosines)
+            list_results.append({
+                'algorithm': algorithm,
+                'gh_list': gh_list
+            })
+    
+    df_lists = pd.DataFrame(list_results)
+    
+    # Agregar diretamente por algoritmo (GLOBAL)
+    results = []
+    if len(df_lists) > 0:
+        for algorithm, group in df_lists.groupby('algorithm'):
+            gh_global = group['gh_list'].mean()  # Média de todas as listas do algoritmo
+            n_lists = len(group)
+            results.append({
+                'algorithm': algorithm,
+                'gh_cosine_lists': gh_global,
+                'n_lists': n_lists
+            })
+    
+    return pd.DataFrame(results)
+
+
 def compute_RMSE_user(eval_pairs: pd.DataFrame) -> pd.DataFrame:
     """
     Calcula RMSE por usuário (Tabela 6.3).
@@ -364,6 +451,165 @@ def compute_RMSE_user(eval_pairs: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(results)
 
 
+def compute_RMSE_global(eval_pairs: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcula RMSE global por algoritmo (sem agregar por usuário primeiro).
+    
+    Para cada algoritmo:
+    - RMSE = sqrt(mean((rating_real - score_pred)^2)) sobre TODOS os pares
+    
+    Retorna DataFrame com colunas: [algorithm, rmse, n_pairs]
+    """
+    results = []
+    
+    for algorithm in eval_pairs['algorithm'].unique():
+        algo_pairs = eval_pairs[eval_pairs['algorithm'] == algorithm]
+        
+        real = algo_pairs['rating_real'].values
+        pred = algo_pairs['score_pred'].values
+        
+        # Remover NaN
+        mask = ~(np.isnan(real) | np.isnan(pred))
+        real = real[mask]
+        pred = pred[mask]
+        
+        if len(real) < 1:
+            continue
+        
+        # RMSE global: calculado diretamente sobre todos os pares
+        rmse = np.sqrt(np.mean((real - pred) ** 2))
+        
+        results.append({
+            'algorithm': algorithm,
+            'rmse': rmse,
+            'n_pairs': len(real)
+        })
+    
+    return pd.DataFrame(results)
+
+
+def compute_NDCG_user(
+    reclists: pd.DataFrame,
+    eval_pairs: pd.DataFrame,
+    N: int = 20
+) -> pd.DataFrame:
+    """
+    Calcula NDCG@N por usuário (métrica de ranking).
+    
+    Para cada usuário:
+    - DCG = sum(rel_k / log2(k+1)) para itens com feedback observado
+    - IDCG = DCG ideal (itens liked ordenados no topo)
+    - NDCG = DCG / IDCG
+    
+    Args:
+        reclists: DataFrame com listas de recomendação [user_id, algorithm, t_rec, news_id, rank_20]
+        eval_pairs: DataFrame com feedback observado [user_id, algorithm, news_id, rating_real]
+        N: Tamanho do cutoff (default: 20)
+    
+    Returns:
+        DataFrame com colunas: [user_id, algorithm, ndcg, n_evaluable]
+    """
+    results = []
+    
+    # Criar dicionário de ratings observados
+    feedback_dict = {}
+    for _, row in eval_pairs.iterrows():
+        key = (row['user_id'], row['algorithm'], row['news_id'])
+        # Binarizar: rating > 0 = liked (1), caso contrário = disliked (0)
+        # No dataset: rating = 1.0 (liked) ou -1.0 (disliked)
+        feedback_dict[key] = 1 if row['rating_real'] > 0 else 0
+    
+    # Processar cada lista de recomendação
+    for (user_id, t_rec, algorithm), group in reclists.groupby(['user_id', 't_rec', 'algorithm']):
+        # Ordenar por rank_20 (rank na top-20)
+        group = group.sort_values('rank_20')
+        
+        # Pegar top-N itens
+        top_n = group.head(N)
+        
+        # Identificar itens com feedback observado (evaluable items)
+        evaluable_items = []
+        relevances = []
+        
+        for _, item_row in top_n.iterrows():
+            item_id = item_row['news_id']
+            rank = item_row['rank_20']
+            key = (user_id, algorithm, item_id)
+            
+            if key in feedback_dict:
+                evaluable_items.append((rank, item_id))
+                relevances.append(feedback_dict[key])
+        
+        if len(evaluable_items) == 0:
+            continue  # Nenhum item avaliável
+        
+        # Calcular DCG
+        dcg = 0.0
+        for i, (rank, item_id) in enumerate(evaluable_items):
+            key = (user_id, algorithm, item_id)
+            rel = feedback_dict[key]
+            dcg += rel / np.log2(rank + 1)  # rank já é 1-indexed
+        
+        # Calcular IDCG (ordenação ideal dos itens liked)
+        n_liked = sum(relevances)
+        idcg = 0.0
+        for k in range(1, min(N + 1, n_liked + 1)):
+            idcg += 1.0 / np.log2(k + 1)
+        
+        # Calcular NDCG
+        if idcg > 0:
+            ndcg = dcg / idcg
+        else:
+            ndcg = 0.0
+        
+        results.append({
+            'user_id': user_id,
+            'algorithm': algorithm,
+            'ndcg': ndcg,
+            'n_evaluable': len(evaluable_items),
+            'n_liked': n_liked
+        })
+    
+    return pd.DataFrame(results)
+
+
+def compute_NDCG_global(
+    reclists: pd.DataFrame,
+    eval_pairs: pd.DataFrame,
+    N: int = 20
+) -> pd.DataFrame:
+    """
+    Calcula NDCG@N global por algoritmo (média dos NDCG por usuário).
+    
+    Args:
+        reclists: DataFrame com listas de recomendação
+        eval_pairs: DataFrame com feedback observado
+        N: Tamanho do cutoff (default: 20)
+    
+    Returns:
+        DataFrame com colunas: [algorithm, ndcg, n_users]
+    """
+    # Calcular NDCG por usuário
+    df_user_ndcg = compute_NDCG_user(reclists, eval_pairs, N=N)
+    
+    if len(df_user_ndcg) == 0:
+        return pd.DataFrame(columns=['algorithm', 'ndcg', 'n_users'])
+    
+    # Agregar por algoritmo (média global)
+    results = []
+    for algorithm, group in df_user_ndcg.groupby('algorithm'):
+        ndcg_mean = group['ndcg'].mean()
+        n_users = len(group)
+        
+        results.append({
+            'algorithm': algorithm,
+            'ndcg': ndcg_mean,
+            'n_users': n_users
+        })
+    
+    return pd.DataFrame(results)
+
+
 def aggregate_like_thesis(
     df_user_metric: pd.DataFrame,
     metric_col: str,
@@ -371,7 +617,7 @@ def aggregate_like_thesis(
     include_minmax: bool = False
 ) -> pd.DataFrame:
     """
-    Agrega métricas por algoritmo no formato da tese.
+    Agrega métricas por algoritmo no formato da tese (agregação por usuário).
     
     Args:
         df_user_metric: DataFrame com colunas [user_id, algorithm, metric_col]
@@ -411,6 +657,53 @@ def aggregate_like_thesis(
         row['p-valor'] = shapiro_p(values)
         
         results.append(row)
+    
+    df_result = pd.DataFrame(results)
+    
+    # Ordenar pelos algoritmos da tese
+    order = ['knnu', 'knnu td', 'knnu mmr', 'knni', 'knni td', 'knni mmr', 'svd', 'svd td', 'svd mmr']
+    df_result['_order'] = df_result['Algoritmo'].map({a: i for i, a in enumerate(order)})
+    df_result = df_result.sort_values('_order').drop(columns=['_order'])
+    df_result = df_result.reset_index(drop=True)
+    
+    return df_result
+
+
+def aggregate_global(
+    df_global_metric: pd.DataFrame,
+    metric_col: str
+) -> pd.DataFrame:
+    """
+    Formata métricas globais (já agregadas por algoritmo) no formato da tese.
+    
+    Args:
+        df_global_metric: DataFrame com colunas [algorithm, metric_col, n_pairs/n_lists]
+        metric_col: Nome da coluna da métrica
+    
+    Retorna DataFrame com formato simplificado da tese (sem estatísticas por usuário).
+    Nota: Assume que os nomes dos algoritmos já foram normalizados previamente.
+    """
+    results = []
+    
+    for _, row in df_global_metric.iterrows():
+        algorithm = row['algorithm']  # Não normaliza novamente!
+        metric_value = row[metric_col]
+        
+        if np.isnan(metric_value):
+            continue
+        
+        result_row = {
+            'Algoritmo': algorithm,
+            metric_col.upper(): metric_value
+        }
+        
+        # Adicionar contagem de pares/listas
+        if 'n_pairs' in row:
+            result_row['N Pares'] = int(row['n_pairs'])
+        if 'n_lists' in row:
+            result_row['N Listas'] = int(row['n_lists'])
+        
+        results.append(result_row)
     
     df_result = pd.DataFrame(results)
     

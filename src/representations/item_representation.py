@@ -49,8 +49,16 @@ class ItemRepresentation:
         return len(self.item_ids)
     
     def __repr__(self) -> str:
-        return (f"ItemRepresentation(type='{self.representation_type}', "
+        base = (f"ItemRepresentation(type='{self.representation_type}', "
                 f"items={len(self.item_ids)}, dims={len(self.feature_names)})")
+        
+        # Adicionar informação de seed/dim se disponível (para embeddings)
+        if 'n_components' in self.metadata or 'random_state' in self.metadata:
+            d = self.metadata.get('n_components', '?')
+            seed = self.metadata.get('random_state', '?')
+            base = base[:-1] + f", d={d}, seed={seed})"
+        
+        return base
 
 
 def get_item_representation(
@@ -328,13 +336,22 @@ def _load_embedding_representation(file_path: Path, kind: str) -> ItemRepresenta
     
     # Adicionar metadados do treino se disponíveis
     if json_metadata:
+        # Extrair n_components e random_state (para SVD) ou seed (para AE)
+        n_components = json_metadata.get('n_components', len(emb_cols))
+        random_state = json_metadata.get('random_state', json_metadata.get('seed'))
+        
         metadata.update({
+            'n_components': n_components,
+            'random_state': random_state,
+            'method': json_metadata.get('method', 'unknown'),
             'training_config': {
                 'epochs': json_metadata.get('epochs'),
                 'batch_size': json_metadata.get('batch_size'),
                 'learning_rate': json_metadata.get('learning_rate'),
                 'dropout_rate': json_metadata.get('dropout_rate'),
-                'seed': json_metadata.get('seed')
+                'seed': json_metadata.get('seed'),
+                'n_iter': json_metadata.get('n_iter'),
+                'normalize_l2': json_metadata.get('normalize_l2')
             },
             'data_hash': json_metadata.get('data_hash')
         })

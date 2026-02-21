@@ -3,6 +3,7 @@ Avaliação de métricas no replay temporal usando algoritmos atribuídos (all-b
 
 Métricas:
 - RMSE: erro entre rating_real e score_pred para itens expostos (na top-20)
+- NDCG@N: métrica de ranking normalizada
 - GH (homogeneidade): similaridade média entre itens da lista top-20
 """
 import pandas as pd
@@ -16,6 +17,7 @@ warnings.filterwarnings('ignore')
 
 from .similarity import cosine_similarity, compute_similarity_from_embeddings, compute_homogeneity
 from .representations import get_item_representation
+from .format_like_thesis import compute_NDCG_user, compute_NDCG_global
 
 
 def load_eval_data(
@@ -262,36 +264,40 @@ def load_embeddings_if_available(
     
     try:
         if is_feature_embedding:
-            print(f"  Carregando embeddings de features: {feature_rep_type}")
-            features_rep_df = get_item_representation(
+            dim_info = f"d={embedding_dim}" if embedding_dim is not None else "d=auto"
+            seed_info = f"seed={seed}" if seed is not None else "seed=auto"
+            print(f"  Carregando embeddings de features: {feature_rep_type} ({dim_info}, {seed_info})")
+            features_rep = get_item_representation(
                 kind=feature_rep_type,
                 output_dir=str(output_dir),
                 embedding_dim=embedding_dim,
                 seed=seed
             )
-            if features_rep_df is not None:
-                emb_cols = [c for c in features_rep_df.columns if c.startswith('emb_')]
-                feature_embeddings = {
-                    row['news_id']: row[emb_cols].values.astype(float)
-                    for _, row in features_rep_df.iterrows()
-                }
-                print(f"  [OK] Feature embeddings: {len(feature_embeddings):,} itens × {len(emb_cols)} dims")
+            if features_rep is not None:
+                feature_embeddings = features_rep.to_dict()
+                n_dims = len(features_rep.feature_names)
+                # Extrair dimensão e seed do metadata se disponível
+                actual_dim = features_rep.metadata.get('n_components', n_dims)
+                actual_seed = features_rep.metadata.get('random_state', 'unknown')
+                print(f"  [OK] Feature embeddings: {len(feature_embeddings):,} itens × {n_dims} dims (d={actual_dim}, seed={actual_seed})")
         
         if is_topic_embedding:
-            print(f"  Carregando embeddings de tópicos: {topic_rep_type}")
-            topics_rep_df = get_item_representation(
+            dim_info = f"d={embedding_dim}" if embedding_dim is not None else "d=auto"
+            seed_info = f"seed={seed}" if seed is not None else "seed=auto"
+            print(f"  Carregando embeddings de tópicos: {topic_rep_type} ({dim_info}, {seed_info})")
+            topics_rep = get_item_representation(
                 kind=topic_rep_type,
                 output_dir=str(output_dir),
                 embedding_dim=embedding_dim,
                 seed=seed
             )
-            if topics_rep_df is not None:
-                emb_cols = [c for c in topics_rep_df.columns if c.startswith('emb_')]
-                topic_embeddings = {
-                    row['news_id']: row[emb_cols].values.astype(float)
-                    for _, row in topics_rep_df.iterrows()
-                }
-                print(f"  [OK] Topic embeddings: {len(topic_embeddings):,} itens × {len(emb_cols)} dims")
+            if topics_rep is not None:
+                topic_embeddings = topics_rep.to_dict()
+                n_dims = len(topics_rep.feature_names)
+                # Extrair dimensão e seed do metadata se disponível
+                actual_dim = topics_rep.metadata.get('n_components', n_dims)
+                actual_seed = topics_rep.metadata.get('random_state', 'unknown')
+                print(f"  [OK] Topic embeddings: {len(topic_embeddings):,} itens × {n_dims} dims (d={actual_dim}, seed={actual_seed})")
     
     except Exception as e:
         print(f"  [AVISO] Erro ao carregar embeddings: {e}")
@@ -529,6 +535,42 @@ def aggregate_user_metrics(
     return user_metrics
 
 
+def aggregate_user_metrics_ndcg(
+    ndcg_by_user: pd.DataFrame,
+    gh_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Agrega métricas NDCG por usuário e algorithm.
+    
+    Args:
+        ndcg_by_user: NDCG por usuário
+        gh_df: GH por lista
+    
+    Returns:
+        DataFrame com métricas agregadas por usuário
+    """
+    print("\nAgregando métricas por usuário...")
+    
+    # Agregar GH por usuário
+    gh_by_user = gh_df.groupby(['user_id', 'algorithm']).agg({
+        'gh_cosine': 'mean',
+        'gh_jaccard': 'mean',
+        'list_size': 'count'  # número de listas
+    }).reset_index()
+    gh_by_user.rename(columns={'list_size': 'n_lists'}, inplace=True)
+    
+    # Merge com NDCG
+    user_metrics = ndcg_by_user.merge(
+        gh_by_user,
+        on=['user_id', 'algorithm'],
+        how='outer'
+    )
+    
+    print(f"Métricas agregadas para {user_metrics['user_id'].nunique()} usuários")
+    
+    return user_metrics
+
+
 def save_metrics(
     eval_pairs_df: pd.DataFrame,
     rmse_by_algorithm: pd.DataFrame,
@@ -538,14 +580,16 @@ def save_metrics(
     total_test_interactions: int,
     total_exposed: int,
     output_dir: Path = Path('outputs'),
-    representation_suffix: str = None
+    representation_suffix: str = None,
+    ndcg_by_algorithm: pd.DataFrame = None,
+    ranking_metric: str = 'rmse'
 ):
     """
     Salva todos os outputs de métricas.
     
     Args:
         eval_pairs_df: Pares de avaliação
-        rmse_by_algorithm: RMSE por algorithm
+        rmse_by_algorithm: RMSE por algorithm (ou None se usar NDCG)
         gh_cosine_by_algo: GH cosine por algorithm
         gh_jaccard_by_algo: GH Jaccard por algorithm
         user_metrics: Métricas por usuário
@@ -553,6 +597,8 @@ def save_metrics(
         total_exposed: Total de interações expostas
         output_dir: Diretório de saída
         representation_suffix: Sufixo da representação (ex: 'ae_features+ae_topics')
+        ndcg_by_algorithm: NDCG por algorithm (ou None se usar RMSE)
+        ranking_metric: Métrica de ranking usada ('rmse' ou 'ndcg')
     """
     print("\nSalvando métricas...")
     
@@ -563,6 +609,16 @@ def save_metrics(
     eval_pairs_path = output_dir / f'eval_pairs_assigned{suffix}.parquet'
     eval_pairs_df.to_parquet(eval_pairs_path, index=False)
     print(f"Eval pairs: {eval_pairs_path} ({len(eval_pairs_df):,} registros)")
+    
+    # Salvar métrica de ranking (RMSE ou NDCG)
+    if ranking_metric == 'rmse' and rmse_by_algorithm is not None:
+        ranking_path = output_dir / f'rmse_by_algorithm{suffix}.parquet'
+        rmse_by_algorithm.to_parquet(ranking_path, index=False)
+        print(f"RMSE: {ranking_path}")
+    elif ranking_metric == 'ndcg' and ndcg_by_algorithm is not None:
+        ranking_path = output_dir / f'ndcg_by_algorithm{suffix}.parquet'
+        ndcg_by_algorithm.to_parquet(ranking_path, index=False)
+        print(f"NDCG: {ranking_path}")
 
 
 def generate_report(
@@ -694,6 +750,19 @@ def main():
         default=None,
         help='Seed dos embeddings (default: auto-detect)'
     )
+    parser.add_argument(
+        '--ranking-metric',
+        type=str,
+        choices=['rmse', 'ndcg'],
+        default='rmse',
+        help='Métrica de ranking a calcular: rmse ou ndcg (default: rmse)'
+    )
+    parser.add_argument(
+        '--ndcg-cutoff',
+        type=int,
+        default=20,
+        help='Cutoff N para NDCG@N (default: 20)'
+    )
     
     args = parser.parse_args()
     
@@ -750,8 +819,21 @@ def main():
             print("\nNenhum eval_pair encontrado. Não há interações expostas para avaliar.")
             continue
         
-        # Calcular RMSE
-        rmse_by_algorithm, rmse_by_user = calculate_rmse_metrics(eval_pairs_df)
+        # Calcular métrica de ranking (RMSE ou NDCG)
+        if args.ranking_metric == 'rmse':
+            rmse_by_algorithm, rmse_by_user = calculate_rmse_metrics(eval_pairs_df)
+            ndcg_by_algorithm, ndcg_by_user = None, None
+        else:  # ndcg
+            print(f"\nCalculando NDCG@{args.ndcg_cutoff}...")
+            # Calcular NDCG por usuário
+            ndcg_by_user = compute_NDCG_user(reclists_df, eval_pairs_df, N=args.ndcg_cutoff)
+            print(f"NDCG calculado para {len(ndcg_by_user)} registros usuário-algoritmo")
+            
+            # Calcular NDCG global por algoritmo
+            ndcg_by_algorithm = compute_NDCG_global(reclists_df, eval_pairs_df, N=args.ndcg_cutoff)
+            print(f"NDCG por algoritmo: {len(ndcg_by_algorithm)} algoritmos")
+            
+            rmse_by_algorithm, rmse_by_user = None, None
         
         # Preparar vetores para GH
         print("\nPreparando vetores para GH...")
@@ -806,7 +888,10 @@ def main():
         )
         
         # Agregar métricas por usuário
-        user_metrics = aggregate_user_metrics(rmse_by_user, gh_df)
+        if args.ranking_metric == 'rmse':
+            user_metrics = aggregate_user_metrics(rmse_by_user, gh_df)
+        else:  # ndcg
+            user_metrics = aggregate_user_metrics_ndcg(ndcg_by_user, gh_df)
         
         # Salvar tudo
         save_metrics(
@@ -818,7 +903,9 @@ def main():
             total_test_interactions,
             total_exposed,
             output_dir=output_path,
-            representation_suffix=suffix
+            representation_suffix=suffix,
+            ndcg_by_algorithm=ndcg_by_algorithm,
+            ranking_metric=args.ranking_metric
         )
     
     print("\n" + "=" * 70)
