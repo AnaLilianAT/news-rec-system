@@ -1,0 +1,14 @@
+{
+  "cache_key": "d64_seed2047321531_svd",
+  "method": "truncated_svd",
+  "n_components": 15,
+  "random_state": 2047321531,
+  "n_iter": 10,
+  "normalize_l2": true,
+  "shape": [
+    1938,
+    15
+  ],
+  "continuous_cols": [],
+  "representation_type": "svd_topics"
+}

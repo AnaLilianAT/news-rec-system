@@ -62,21 +62,25 @@ AUTOENCODER_CONFIG = {
 # Método alternativo ao autoencoder: determinístico, rápido, linear
 SVD_CONFIG = {
     # Arquitetura
-    'n_components': 32,            # Número de componentes SVD (dimensão do embedding)
-    'n_iter': 5,                   # Número de iterações do algoritmo SVD
-    
+    "n_components": 48,      # 48 costuma reter bem mais estrutura que 32 aqui
+    "n_iter": 10,            # mais iterações => embeddings mais estáveis
+
     # Tratamento de features contínuas
-    'continuous_cols': ['polaridade', 'subjetividade'],  # Colunas contínuas
-    'concat_continuous_after': True,  # Se True, concatena após embedding SVD
-    
+    "continuous_cols": ["polaridade", "subjetividade"],
+    "concat_continuous_after": False,  # melhor: incluir antes (ver nota abaixo)
+
+    # Pré/pós-processamento (recomendado adicionar ao seu pipeline)
+    "scale_continuous": True,          # padronizar contínuas (z-score)
+    "use_tfidf_on_binary": True,       # TF-IDF nas binárias antes do SVD (muito útil p/ entidades raras)
+
     # Pós-processamento
-    'normalize_l2': True,          # Normalizar embeddings (L2) após extração
-    
+    "normalize_l2": True,              # ótimo se você usa cosseno em GH/MMR/TD
+
     # Reprodutibilidade
-    'random_state': RANDOM_SEED,   # Seed para SVD
-    
+    "random_state": RANDOM_SEED,
+
     # Identificadores
-    'id_col': 'news_id',           # Nome da coluna de identificação
+    "id_col": "id",
 }
 
 # ============================================================================

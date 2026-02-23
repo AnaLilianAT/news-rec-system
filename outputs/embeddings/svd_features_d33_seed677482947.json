@@ -3,7 +3,7 @@
   "method": "truncated_svd",
   "n_components": 33,
   "random_state": 677482947,
-  "n_iter": 5,
+  "n_iter": 10,
   "normalize_l2": true,
   "shape": [
     1938,
