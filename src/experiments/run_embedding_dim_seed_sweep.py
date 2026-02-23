@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
 warnings.filterwarnings('ignore')
 
-from src.utils.dim_grid import build_dims, compute_d_min_heuristic
+from src.utils.dim_grid import build_dims, compute_d_min_heuristic, get_binary_dim
 from src.experiments.seed_utils import load_or_create_seeds
 
 
@@ -286,7 +286,6 @@ def main():
         print(f"\n[>] Dimensoes: {dims}")
     else:
         if args.d_bin is None:
-            from src.experiments.embedding_dim_sweep import get_binary_dim
             d_bin = get_binary_dim()
         else:
             d_bin = args.d_bin

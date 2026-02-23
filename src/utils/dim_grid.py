@@ -158,6 +158,49 @@ def validate_dims_list(dims: List[int], d_max: Optional[int] = None) -> List[int
     return unique_sorted_dims
 
 
+def get_binary_dim() -> int:
+    """
+    Detecta a dimensão total do vetor binário (features + topics).
+    
+    Returns:
+        Soma de dimensões de canonical_features + canonical_topics
+    
+    Raises:
+        FileNotFoundError: Se arquivos canônicos não existirem
+    """
+    from pathlib import Path
+    import pandas as pd
+    
+    outputs_dir = Path('outputs')
+    
+    features_path = outputs_dir / 'canonical_features.parquet'
+    topics_path = outputs_dir / 'canonical_topics.parquet'
+    
+    if not features_path.exists():
+        raise FileNotFoundError(
+            f"Arquivo não encontrado: {features_path}\n"
+            "Execute 'python -m src.build_canonical_tables' primeiro"
+        )
+    
+    if not topics_path.exists():
+        raise FileNotFoundError(
+            f"Arquivo não encontrado: {topics_path}\n"
+            "Execute 'python -m src.build_canonical_tables' primeiro"
+        )
+    
+    # Carregar e contar colunas (exceto news_id)
+    df_features = pd.read_parquet(features_path)
+    
+    n_features = len([c for c in df_features.columns if c != 'news_id'])
+    
+    d_bin = n_features
+    
+    print(f"Dimensão binária detectada:")
+    print(f"  - Total (D_bin): {d_bin}")
+    
+    return d_bin
+
+
 def compute_d_min_heuristic(d_bin: int) -> int:
     """
     Calcula d_min baseado em heurística informacional.
