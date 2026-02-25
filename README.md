@@ -6,7 +6,7 @@ This repository contains the code and experiment pipeline used in the paper:
 > Authors: **Anonymous for double-blind review**  
 > Venue: **CSBC/SEMISH**, **2026**
 
-We study how replacing a sparse binary news-feature representation with low-dimensional embeddings affects the relevance–diversity trade-off in a news recommendation pipeline. Experiments are conducted using collaborative filtering recommenders and post-filtering diversification (e.g., MMR / topic diversification), evaluated with ranking relevance and homogeneity/diversity metrics.
+We study how replacing a sparse binary news-feature representation with low-dimensional embeddings affects the relevance–diversity trade-off in a news recommendation pipeline. Experiments are conducted using collaborative filtering recommenders and post-filtering diversification, evaluated with ranking relevance and intra-list similarity metrics.
 
 ## Repository Contents
 
