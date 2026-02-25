@@ -25,9 +25,9 @@ Before running these commands, make sure you have installed all dependencies lis
 
 The pipeline consists of **3 sequential steps**:
 
-2. **Dimension × Seed Sweep**: Train embeddings and evaluate across multiple dimensions and seeds
-3. **Results Aggregation**: Calculate statistics (mean, std, CI95) per (dimension, algorithm)
-4. **Trade-off Analysis**: Find optimal dimension for different NDCG-ILS weights
+1. **Dimension × Seed Sweep**: Train embeddings and evaluate across multiple dimensions and seeds
+2. **Results Aggregation**: Calculate statistics (mean, std, CI95) per (dimension, algorithm)
+3. **Trade-off Analysis**: Find optimal dimension for different NDCG-ILS weights
 
 ### Step 1: Embedding Dimension Sweep
 
