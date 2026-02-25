@@ -17,7 +17,7 @@ We study how replacing a sparse binary news-feature representation with low-dime
 - Diversification: Maximal Marginal Relevance (MMR)
 - Metrics: NDCG@10 and intra-list similarity
 
-# NDCG vs GH Trade-off Analysis Pipeline
+# NDCG vs ILS Trade-off Analysis Pipeline
 
 This section explains how to reproduce the experimental results reported in the paper, including the complete pipeline used to analyze the trade-off between accuracy (NDCG) and diversity (ILS) across embedding dimensions.
 
