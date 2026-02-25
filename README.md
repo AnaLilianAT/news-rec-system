@@ -19,7 +19,7 @@ We study how replacing a sparse binary news-feature representation with low-dime
 
 # NDCG vs GH Trade-off Analysis Pipeline
 
-The following sections explain how to reproduce the experimental results reported in the paper, including the complete pipeline used to analyze the trade-off between accuracy (NDCG) and diversity (ILS) across embedding dimensions.
+This section explains how to reproduce the experimental results reported in the paper, including the complete pipeline used to analyze the trade-off between accuracy (NDCG) and diversity (ILS) across embedding dimensions.
 
 Before running these commands, make sure you have installed all dependencies listed in `requirements.txt`.
 
