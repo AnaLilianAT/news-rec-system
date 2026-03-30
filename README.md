@@ -32,13 +32,7 @@ The pipeline consists of **3 sequential steps**:
 ### Step 1: Embedding Dimension Sweep
 
 ```bash
-python -m src.experiments.run_embedding_dim_seed_sweep \
-    --step 1 \
-    --n-seeds 20 \
-    --embedding-method svd \
-    --ranking-metric ndcg \
-    --ndcg-cutoff 10 \
-    --cleanup-intermediate \
+python -m src.experiments.run_embedding_dim_seed_sweep --step 1 --n-seeds 20 --embedding-method svd --ranking-metric ndcg --ndcg-cutoff 10 --cleanup-intermediate
 ```
 **Outputs:**
 - `outputs/experiments/embedding_dim_seed_sweep_runs.parquet`
@@ -47,7 +41,7 @@ python -m src.experiments.run_embedding_dim_seed_sweep \
 ### Step 2: Aggregate Results
 
 ```bash
-python -m src.experiments.aggregate_embedding_dim_seed_sweep \
+python -m src.experiments.aggregate_embedding_dim_seed_sweep
 ```
 **Outputs:**
 - `outputs/experiments/embedding_dim_seed_sweep_agg.parquet`
@@ -55,7 +49,7 @@ python -m src.experiments.aggregate_embedding_dim_seed_sweep \
 ### Step 3: Trade-off Analysis
 
 ```bash
-python -m src.experiments.analyze_ndcg_gh_tradeoff \
+python -m src.experiments.analyze_ndcg_gh_tradeoff
     --ndcg-cutoff 10
 ```
 **Outputs:**
