@@ -508,9 +508,9 @@ def compute_homogeneity(
     **kwargs
 ) -> float:
     """
-    Calcula homogeneidade (GH) de um conjunto de itens.
+    Calcula homogeneidade (ILS) de um conjunto de itens.
     
-    GH = (1/|R|) × Σ_{i<j} similarity(i,j)
+    ILS = (1/|R|) × Σ_{i<j} similarity(i,j)
     
     Suporta três modos:
     1. Vetores: calcula similaridade on-the-fly (modo original)
@@ -528,7 +528,7 @@ def compute_homogeneity(
         **kwargs: Argumentos adicionais para a métrica (modo 1)
     
     Returns:
-        Homogeneidade (GH) no intervalo [0, 1]
+        Homogeneidade (ILS) no intervalo [0, 1]
     
     Raises:
         ValueError: Se nenhum modo for especificado corretamente

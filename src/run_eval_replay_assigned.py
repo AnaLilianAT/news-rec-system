@@ -4,7 +4,7 @@ Avaliação de métricas no replay temporal usando algoritmos atribuídos (all-b
 Métricas:
 - RMSE: erro entre rating_real e score_pred para itens expostos (na top-20)
 - NDCG@N: métrica de ranking normalizada
-- GH (homogeneidade): similaridade média entre itens da lista top-20
+- ILS (homogeneidade): similaridade média entre itens da lista top-20
 """
 import pandas as pd
 import numpy as np
@@ -307,14 +307,14 @@ def load_embeddings_if_available(
     return feature_embeddings, topic_embeddings
 
 
-def calculate_gh_cosine(
+def calculate_ils_cosine(
     news_ids: List[int],
     feature_vectors: Optional[Dict[int, np.ndarray]] = None,
     similarity_matrix: Optional[np.ndarray] = None,
     ordered_ids: Optional[List[int]] = None
 ) -> float:
     """
-    Calcula homogeneidade usando similaridade cosseno entre features.
+    Calcula homogeneidade (ILS) usando similaridade cosseno entre features.
     
     Suporta dois modos:
     1. Vetores: calcula similaridade on-the-fly (modo legado)
@@ -327,7 +327,7 @@ def calculate_gh_cosine(
         ordered_ids: IDs na ordem da matriz (modo 2)
     
     Returns:
-        GH médio (similaridade cosseno média entre todos os pares)
+        ILS médio (similaridade cosseno média entre todos os pares)
     """
     # Usar compute_homogeneity com suporte a matriz precalculada
     if similarity_matrix is not None and ordered_ids is not None:
@@ -361,9 +361,9 @@ def jaccard_similarity(set1: set, set2: set) -> float:
     return intersection / union if union > 0 else 0.0
 
 
-def calculate_gh_jaccard(news_ids: List[int], topic_vectors: Dict[int, np.ndarray], threshold: float = 0.1) -> float:
+def calculate_ils_jaccard(news_ids: List[int], topic_vectors: Dict[int, np.ndarray], threshold: float = 0.1) -> float:
     """
-    Calcula homogeneidade usando Jaccard entre tópicos binários.
+    Calcula homogeneidade (ILS) usando Jaccard entre tópicos binários.
     
     Args:
         news_ids: Lista de news_ids da top-20
@@ -371,7 +371,7 @@ def calculate_gh_jaccard(news_ids: List[int], topic_vectors: Dict[int, np.ndarra
         threshold: Limiar para binarizar tópicos
     
     Returns:
-        GH médio (Jaccard médio entre todos os pares)
+        ILS médio (Jaccard médio entre todos os pares)
     """
     # Filtrar apenas news_ids que têm tópicos
     valid_ids = [nid for nid in news_ids if nid in topic_vectors]
@@ -398,7 +398,7 @@ def calculate_gh_jaccard(news_ids: List[int], topic_vectors: Dict[int, np.ndarra
     return np.mean(similarities) if similarities else np.nan
 
 
-def calculate_gh_metrics(
+def calculate_ils_metrics(
     reclists_df: pd.DataFrame,
     feature_vectors: Optional[Dict[int, np.ndarray]] = None,
     topic_vectors: Optional[Dict[int, np.ndarray]] = None,
@@ -408,7 +408,7 @@ def calculate_gh_metrics(
     topic_ordered_ids: Optional[List[int]] = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Calcula métricas de homogeneidade (GH) para cada lista top-20.
+    Calcula métricas de homogeneidade (ILS) para cada lista top-20.
     
     Suporta dois modos:
     1. Vetores: calcula similaridade on-the-fly (modo legado)
@@ -416,17 +416,17 @@ def calculate_gh_metrics(
     
     Args:
         reclists_df: Listas top-20
-        feature_vectors: Features para GH_COSINE (modo 1)
-        topic_vectors: Tópicos para GH_JACCARD (modo 1)
+        feature_vectors: Features para ILS_COSINE (modo 1)
+        topic_vectors: Tópicos para ILS_JACCARD (modo 1)
         feature_sim_matrix: Matriz de similaridade de features (modo 2)
         feature_ordered_ids: IDs na ordem da matriz de features (modo 2)
         topic_sim_matrix: Matriz de similaridade de topics (modo 2)
         topic_ordered_ids: IDs na ordem da matriz de topics (modo 2)
     
     Returns:
-        Tupla (gh_cosine_by_algorithm, gh_jaccard_by_algorithm, gh_df)
+        Tupla (ils_cosine_by_algorithm, ils_jaccard_by_algorithm, ils_df)
     """
-    print("\nCalculando GH (homogeneidade)...")
+    print("\nCalculando ILS (homogeneidade)...")
     
     # Indicar qual modo está sendo usado
     if feature_sim_matrix is not None:
@@ -439,7 +439,7 @@ def calculate_gh_metrics(
     else:
         print("  ℹ Usando vetores binários/contínuos para topics (modo legado)")
     
-    gh_results = []
+    ils_results = []
     
     # Agrupar por (user_id, t_rec, algorithm)
     for (user_id, t_rec, algorithm), group in tqdm(
@@ -448,84 +448,84 @@ def calculate_gh_metrics(
     ):
         news_ids = group['news_id'].tolist()
         
-        # GH_COSINE_FEATURES
-        gh_cosine = calculate_gh_cosine(
+        # ILS_COSINE_FEATURES
+        ils_cosine = calculate_ils_cosine(
             news_ids=news_ids,
             feature_vectors=feature_vectors,
             similarity_matrix=feature_sim_matrix,
             ordered_ids=feature_ordered_ids
         )
         
-        # GH_JACCARD_TOPICS
+        # ILS_JACCARD_TOPICS
         # Para topics, usar matriz se disponível OU vetores
         if topic_sim_matrix is not None and topic_ordered_ids is not None:
             # Usar compute_homogeneity diretamente para topics também
-            gh_jaccard = compute_homogeneity(
+            ils_jaccard = compute_homogeneity(
                 item_ids=news_ids,
                 similarity_matrix=topic_sim_matrix,
                 ordered_ids=topic_ordered_ids,
                 normalize_by='n_pairs'
             )
         else:
-            gh_jaccard = calculate_gh_jaccard(news_ids, topic_vectors)
+            ils_jaccard = calculate_ils_jaccard(news_ids, topic_vectors)
         
-        gh_results.append({
+        ils_results.append({
             'user_id': user_id,
             't_rec': t_rec,
             'algorithm': algorithm,
-            'gh_cosine': gh_cosine,
-            'gh_jaccard': gh_jaccard,
+            'ils_cosine': ils_cosine,
+            'ils_jaccard': ils_jaccard,
             'list_size': len(news_ids)
         })
     
-    gh_df = pd.DataFrame(gh_results)
+    ils_df = pd.DataFrame(ils_results)
     
-    # Agregar por algorithm - GH_COSINE
-    gh_cosine_by_algo = gh_df.groupby('algorithm').agg({
-        'gh_cosine': ['mean', 'median', 'std', 'count']
+    # Agregar por algorithm - ILS_COSINE
+    ils_cosine_by_algo = ils_df.groupby('algorithm').agg({
+        'ils_cosine': ['mean', 'median', 'std', 'count']
     }).round(4)
-    gh_cosine_by_algo.columns = ['mean_gh_cosine', 'median_gh_cosine', 'std_gh_cosine', 'n_lists']
-    gh_cosine_by_algo = gh_cosine_by_algo.reset_index()
+    ils_cosine_by_algo.columns = ['mean_ils_cosine', 'median_ils_cosine', 'std_ils_cosine', 'n_lists']
+    ils_cosine_by_algo = ils_cosine_by_algo.reset_index()
     
-    # Agregar por algorithm - GH_JACCARD
-    gh_jaccard_by_algo = gh_df.groupby('algorithm').agg({
-        'gh_jaccard': ['mean', 'median', 'std', 'count']
+    # Agregar por algorithm - ILS_JACCARD
+    ils_jaccard_by_algo = ils_df.groupby('algorithm').agg({
+        'ils_jaccard': ['mean', 'median', 'std', 'count']
     }).round(4)
-    gh_jaccard_by_algo.columns = ['mean_gh_jaccard', 'median_gh_jaccard', 'std_gh_jaccard', 'n_lists']
-    gh_jaccard_by_algo = gh_jaccard_by_algo.reset_index()
+    ils_jaccard_by_algo.columns = ['mean_ils_jaccard', 'median_ils_jaccard', 'std_ils_jaccard', 'n_lists']
+    ils_jaccard_by_algo = ils_jaccard_by_algo.reset_index()
     
-    print(f"GH calculado para {len(gh_df)} listas")
+    print(f"ILS calculado para {len(ils_df)} listas")
     
-    return gh_cosine_by_algo, gh_jaccard_by_algo, gh_df
+    return ils_cosine_by_algo, ils_jaccard_by_algo, ils_df
 
 
 def aggregate_user_metrics(
     rmse_by_user: pd.DataFrame,
-    gh_df: pd.DataFrame
+    ils_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Agrega métricas por usuário e algorithm.
     
     Args:
         rmse_by_user: RMSE por usuário
-        gh_df: GH por lista
+        ils_df: ILS por lista
     
     Returns:
         DataFrame com métricas agregadas por usuário
     """
     print("\nAgregando métricas por usuário...")
     
-    # Agregar GH por usuário
-    gh_by_user = gh_df.groupby(['user_id', 'algorithm']).agg({
-        'gh_cosine': 'mean',
-        'gh_jaccard': 'mean',
+    # Agregar ILS por usuário
+    ils_by_user = ils_df.groupby(['user_id', 'algorithm']).agg({
+        'ils_cosine': 'mean',
+        'ils_jaccard': 'mean',
         'list_size': 'count'  # número de listas
     }).reset_index()
-    gh_by_user.rename(columns={'list_size': 'n_lists'}, inplace=True)
+    ils_by_user.rename(columns={'list_size': 'n_lists'}, inplace=True)
     
     # Merge com RMSE
     user_metrics = rmse_by_user.merge(
-        gh_by_user,
+        ils_by_user,
         on=['user_id', 'algorithm'],
         how='outer'
     )
@@ -537,31 +537,31 @@ def aggregate_user_metrics(
 
 def aggregate_user_metrics_ndcg(
     ndcg_by_user: pd.DataFrame,
-    gh_df: pd.DataFrame
+    ils_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
     Agrega métricas NDCG por usuário e algorithm.
     
     Args:
         ndcg_by_user: NDCG por usuário
-        gh_df: GH por lista
+        ils_df: ILS por lista
     
     Returns:
         DataFrame com métricas agregadas por usuário
     """
     print("\nAgregando métricas por usuário...")
     
-    # Agregar GH por usuário
-    gh_by_user = gh_df.groupby(['user_id', 'algorithm']).agg({
-        'gh_cosine': 'mean',
-        'gh_jaccard': 'mean',
+    # Agregar ILS por usuário
+    ils_by_user = ils_df.groupby(['user_id', 'algorithm']).agg({
+        'ils_cosine': 'mean',
+        'ils_jaccard': 'mean',
         'list_size': 'count'  # número de listas
     }).reset_index()
-    gh_by_user.rename(columns={'list_size': 'n_lists'}, inplace=True)
+    ils_by_user.rename(columns={'list_size': 'n_lists'}, inplace=True)
     
     # Merge com NDCG
     user_metrics = ndcg_by_user.merge(
-        gh_by_user,
+        ils_by_user,
         on=['user_id', 'algorithm'],
         how='outer'
     )
@@ -574,8 +574,8 @@ def aggregate_user_metrics_ndcg(
 def save_metrics(
     eval_pairs_df: pd.DataFrame,
     rmse_by_algorithm: pd.DataFrame,
-    gh_cosine_by_algo: pd.DataFrame,
-    gh_jaccard_by_algo: pd.DataFrame,
+    ils_cosine_by_algo: pd.DataFrame,
+    ils_jaccard_by_algo: pd.DataFrame,
     user_metrics: pd.DataFrame,
     total_test_interactions: int,
     total_exposed: int,
@@ -590,8 +590,8 @@ def save_metrics(
     Args:
         eval_pairs_df: Pares de avaliação
         rmse_by_algorithm: RMSE por algorithm (ou None se usar NDCG)
-        gh_cosine_by_algo: GH cosine por algorithm
-        gh_jaccard_by_algo: GH Jaccard por algorithm
+        ils_cosine_by_algo: ILS cosine por algorithm
+        ils_jaccard_by_algo: ILS Jaccard por algorithm
         user_metrics: Métricas por usuário
         total_test_interactions: Total de interações no teste
         total_exposed: Total de interações expostas
@@ -620,12 +620,26 @@ def save_metrics(
         ndcg_by_algorithm.to_parquet(ranking_path, index=False)
         print(f"NDCG: {ranking_path}")
 
+    # Salvar ILS por algoritmo
+    ils_averages_parquet = output_dir / f'ils_by_algorithm{suffix}.parquet'
+    ils_cosine_by_algo.to_parquet(ils_averages_parquet, index=False)
+    print(f"ILS (cosine): {ils_averages_parquet}")
+
+    ils_jaccard_parquet = output_dir / f'ils_jaccard_by_algorithm{suffix}.parquet'
+    ils_jaccard_by_algo.to_parquet(ils_jaccard_parquet, index=False)
+    print(f"ILS (jaccard): {ils_jaccard_parquet}")
+
+    # Salvar métricas por usuário
+    user_metrics_path = output_dir / f'user_metrics_assigned{suffix}.parquet'
+    user_metrics.to_parquet(user_metrics_path, index=False)
+    print(f"Métricas por usuário: {user_metrics_path}")
+
 
 def generate_report(
     eval_pairs_df: pd.DataFrame,
     rmse_by_algorithm: pd.DataFrame,
-    gh_cosine_by_algo: pd.DataFrame,
-    gh_jaccard_by_algo: pd.DataFrame,
+    ils_cosine_by_algo: pd.DataFrame,
+    ils_jaccard_by_algo: pd.DataFrame,
     user_metrics: pd.DataFrame,
     total_test_interactions: int,
     total_exposed: int,
@@ -637,21 +651,20 @@ def generate_report(
     """
     report_dir = output_dir / 'reports'
     report_dir.mkdir(exist_ok=True)
-    
+
     suffix = f"_{representation_suffix}" if representation_suffix else ""
     report_path = report_dir / f'eval_report_assigned{suffix}.md'
-    
     exposure_rate = 100 * total_exposed / total_test_interactions if total_test_interactions > 0 else 0
-    
+
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write("# Relatório de Avaliação - Replay Temporal (ALL-BETWEEN)\n\n")
         f.write(f"**Data de geração**: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        
+
         f.write("## Exposição\n\n")
         f.write(f"- **Total de interações no teste**: {total_test_interactions:,}\n")
         f.write(f"- **Interações expostas (na top-20)**: {total_exposed:,}\n")
         f.write(f"- **Taxa de exposição**: {exposure_rate:.2f}%\n\n")
-        
+
         f.write("## RMSE por Algoritmo\n\n")
         f.write("RMSE mede o erro de predição entre score_pred e rating_real para itens expostos.\n\n")
         f.write("| Algoritmo | RMSE | N Pares | Média Rating Real | Média Score Pred |\n")
@@ -659,7 +672,7 @@ def generate_report(
         for _, row in rmse_by_algorithm.iterrows():
             f.write(f"| {row['algorithm']} | {row['rmse']:.4f} | {row['n_pairs']:,} | "
                    f"{row['mean_rating_real']:.3f} | {row['mean_score_pred']:.3f} |\n")
-        
+
         f.write("\n### Estatísticas RMSE por Usuário\n\n")
         if len(user_metrics[user_metrics['rmse'].notna()]) > 0:
             rmse_stats = user_metrics.groupby('algorithm')['rmse'].agg(['mean', 'median', 'std', 'count'])
@@ -670,49 +683,47 @@ def generate_report(
                        f"{row['std']:.4f} | {int(row['count'])} |\n")
         else:
             f.write("Dados insuficientes para calcular RMSE por usuário.\n")
-        
-        f.write("\n## GH Cosine (Homogeneidade por Features)\n\n")
-        f.write("GH_COSINE mede a similaridade média (cosseno) entre itens da lista top-20.\n\n")
-        f.write("| Algoritmo | Média GH | Mediana GH | Std GH | N Listas |\n")
-        f.write("|-----------|----------|------------|--------|----------|\n")
-        for _, row in gh_cosine_by_algo.iterrows():
-            f.write(f"| {row['algorithm']} | {row['mean_gh_cosine']:.4f} | "
-                   f"{row['median_gh_cosine']:.4f} | {row['std_gh_cosine']:.4f} | "
+
+        f.write("\n## ILS Cosine (Homogeneidade por Features)\n\n")
+        f.write("ILS_COSINE mede a similaridade média (cosseno) entre itens da lista top-20.\n\n")
+        f.write("| Algoritmo | Média ILS | Mediana ILS | Std ILS | N Listas |\n")
+        f.write("|-----------|-----------|-------------|---------|----------|\n")
+        for _, row in ils_cosine_by_algo.iterrows():
+            f.write(f"| {row['algorithm']} | {row['mean_ils_cosine']:.4f} | "
+                   f"{row['median_ils_cosine']:.4f} | {row['std_ils_cosine']:.4f} | "
                    f"{int(row['n_lists'])} |\n")
-        
-        f.write("\n## GH Jaccard (Homogeneidade por Tópicos)\n\n")
-        f.write("GH_JACCARD mede a similaridade Jaccard média entre tópicos dominantes dos itens.\n\n")
-        f.write("| Algoritmo | Média GH | Mediana GH | Std GH | N Listas |\n")
-        f.write("|-----------|----------|------------|--------|----------|\n")
-        for _, row in gh_jaccard_by_algo.iterrows():
-            f.write(f"| {row['algorithm']} | {row['mean_gh_jaccard']:.4f} | "
-                   f"{row['median_gh_jaccard']:.4f} | {row['std_gh_jaccard']:.4f} | "
+
+        f.write("\n## ILS Jaccard (Homogeneidade por Tópicos)\n\n")
+        f.write("ILS_JACCARD mede a similaridade Jaccard média entre tópicos dominantes dos itens.\n\n")
+        f.write("| Algoritmo | Média ILS | Mediana ILS | Std ILS | N Listas |\n")
+        f.write("|-----------|-----------|-------------|---------|----------|\n")
+        for _, row in ils_jaccard_by_algo.iterrows():
+            f.write(f"| {row['algorithm']} | {row['mean_ils_jaccard']:.4f} | "
+                   f"{row['median_ils_jaccard']:.4f} | {row['std_ils_jaccard']:.4f} | "
                    f"{int(row['n_lists'])} |\n")
-        
+
         f.write("\n## Resumo Geral\n\n")
         f.write(f"- **Algoritmos avaliados**: {len(rmse_by_algorithm)}\n")
         f.write(f"- **Usuários com métricas**: {user_metrics['user_id'].nunique()}\n")
         f.write(f"- **Total de eval_pairs**: {len(eval_pairs_df):,}\n")
-        f.write(f"- **Listas avaliadas (GH)**: {gh_cosine_by_algo['n_lists'].sum():.0f}\n\n")
-        
-        # Top 5 algoritmos por RMSE
+        f.write(f"- **Listas avaliadas (ILS)**: {ils_cosine_by_algo['n_lists'].sum():.0f}\n\n")
+
         f.write("### Top 5 Algoritmos (Menor RMSE)\n\n")
         top5_rmse = rmse_by_algorithm.head(5)
         for idx, row in top5_rmse.iterrows():
             f.write(f"{idx + 1}. **{row['algorithm']}**: RMSE = {row['rmse']:.4f} ({row['n_pairs']:,} pares)\n")
-        
-        # Top 5 algoritmos por menor GH cosine (mais diversificados)
-        f.write("\n### Top 5 Algoritmos (Menor GH Cosine = Mais Diversos)\n\n")
-        top5_diverse = gh_cosine_by_algo.sort_values('mean_gh_cosine').head(5)
+
+        f.write("\n### Top 5 Algoritmos (Menor ILS Cosine = Mais Diversos)\n\n")
+        top5_diverse = ils_cosine_by_algo.sort_values('mean_ils_cosine').head(5)
         for idx, (_, row) in enumerate(top5_diverse.iterrows(), 1):
-            f.write(f"{idx}. **{row['algorithm']}**: GH = {row['mean_gh_cosine']:.4f} ({int(row['n_lists'])} listas)\n")
-        
+            f.write(f"{idx}. **{row['algorithm']}**: ILS = {row['mean_ils_cosine']:.4f} ({int(row['n_lists'])} listas)\n")
+
         f.write("\n## Interpretação\n\n")
         f.write("- **RMSE baixo**: Predições mais precisas\n")
-        f.write("- **GH alto**: Lista mais homogênea (menos diversa)\n")
-        f.write("- **GH baixo**: Lista mais diversificada\n")
+        f.write("- **ILS alto**: Lista mais homogênea (menos diversa)\n")
+        f.write("- **ILS baixo**: Lista mais diversificada\n")
         f.write("- **Taxa de exposição**: Percentual de avaliações no teste que foram recomendadas\n")
-    
+
     print(f"Relatório: {report_path}")
 
 
@@ -835,8 +846,8 @@ def main():
             
             rmse_by_algorithm, rmse_by_user = None, None
         
-        # Preparar vetores para GH
-        print("\nPreparando vetores para GH...")
+        # Preparar vetores para ILS
+        print("\nPreparando vetores para ILS...")
         feature_vectors = prepare_feature_vectors(features_df)
         print(f"Feature vectors: {len(feature_vectors):,}")
         
@@ -876,8 +887,8 @@ def main():
             )
             print(f"  [OK] Matriz de similaridade: {topic_sim_matrix.shape[0]} × {topic_sim_matrix.shape[1]}")
         
-        # Calcular GH (com ou sem matrizes precalculadas)
-        gh_cosine_by_algo, gh_jaccard_by_algo, gh_df = calculate_gh_metrics(
+        # Calcular ILS (com ou sem matrizes precalculadas)
+        ils_cosine_by_algo, ils_jaccard_by_algo, ils_df = calculate_ils_metrics(
             reclists_df=reclists_df,
             feature_vectors=feature_vectors,
             topic_vectors=topic_vectors,
@@ -889,16 +900,16 @@ def main():
         
         # Agregar métricas por usuário
         if args.ranking_metric == 'rmse':
-            user_metrics = aggregate_user_metrics(rmse_by_user, gh_df)
+            user_metrics = aggregate_user_metrics(rmse_by_user, ils_df)
         else:  # ndcg
-            user_metrics = aggregate_user_metrics_ndcg(ndcg_by_user, gh_df)
+            user_metrics = aggregate_user_metrics_ndcg(ndcg_by_user, ils_df)
         
         # Salvar tudo
         save_metrics(
             eval_pairs_df,
             rmse_by_algorithm,
-            gh_cosine_by_algo,
-            gh_jaccard_by_algo,
+            ils_cosine_by_algo,
+            ils_jaccard_by_algo,
             user_metrics,
             total_test_interactions,
             total_exposed,

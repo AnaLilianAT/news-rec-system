@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Análise do trade-off entre NDCG e GH (diversidade).
+Análise do trade-off entre NDCG e ILS (diversidade).
 
 Lê os resultados agregados do sweep de dimensão x seed e calcula o trade-off
-entre acurácia (NDCG) e diversidade (GH) para diferentes valores de alpha.
+entre acurácia (NDCG) e diversidade (ILS) para diferentes valores de alpha.
 
 Para cada algoritmo:
-1. Normaliza NDCG e GH usando min-max normalization (escala 0-1)
-2. Calcula trade-off: NDCG_norm(d) - α * GH_norm(d)
+1. Normaliza NDCG e ILS usando min-max normalization (escala 0-1)
+2. Calcula trade-off: NDCG_norm(d) - α * ILS_norm(d)
 3. Encontra dimensão ótima que maximiza o trade-off para cada α
 4. Gera tabela com resultados por valor de α
 
@@ -60,11 +60,11 @@ def calculate_tradeoff(
     df_algo: pd.DataFrame,
     alphas: List[float],
     metric_col: str = 'ndcg_mean',
-    diversity_col: str = 'gh_mean',
+    diversity_col: str = 'ils_mean',
     metric_label: str = 'NDCG@20'
 ) -> pd.DataFrame:
     """
-    Calcula trade-off entre métrica de ranking e diversidade para um algoritmo.
+    Calcula trade-off entre métrica de ranking e diversidade (ILS) para um algoritmo.
     
     Para cada valor de alpha, encontra a dimensão d* que maximiza:
         trade-off ponderado(d) = (1 - alpha) * metric_norm(d) - alpha * diversity_norm(d)
@@ -73,7 +73,7 @@ def calculate_tradeoff(
         df_algo: DataFrame filtrado para um algoritmo com colunas 'd', metric_col, diversity_col
         alphas: Lista de valores de alpha para testar
         metric_col: Nome da coluna da métrica de ranking (ex: 'ndcg_mean')
-        diversity_col: Nome da coluna de diversidade (ex: 'gh_mean')
+        diversity_col: Nome da coluna de diversidade (ex: 'ils_mean')
         metric_label: Label da métrica para nome da coluna (ex: 'NDCG@20', 'RMSE')
     
     Returns:
@@ -81,7 +81,7 @@ def calculate_tradeoff(
             - alpha: Valor de alpha
             - tradeoff: Valor do trade-off na dimensão ótima
             - [metric_label]: Valor original da métrica na dimensão ótima
-            - GH: Valor original da diversidade na dimensão ótima
+            - ILS: Valor original da diversidade na dimensão ótima
             - dim_optimal: Dimensão ótima que maximiza trade-off
     """
     # Ordenar por dimensão
@@ -105,7 +105,7 @@ def calculate_tradeoff(
             'alpha': alpha,
             'tradeoff': row_optimal['tradeoff'],
             metric_label: row_optimal[metric_col],
-            'GH': row_optimal[diversity_col],
+            'ILS': row_optimal[diversity_col],
             'dim_optimal': int(row_optimal['d'])
         })
     
@@ -120,7 +120,7 @@ def analyze_tradeoff(
     verbose: bool = True
 ) -> Dict[str, pd.DataFrame]:
     """
-    Analisa trade-off entre NDCG e GH para todos os algoritmos.
+    Analisa trade-off entre NDCG e ILS para todos os algoritmos.
     
     Args:
         input_path: Path do arquivo parquet agregado
@@ -134,7 +134,7 @@ def analyze_tradeoff(
     """
     if verbose:
         print("="*70)
-        print(" ANÁLISE DE TRADE-OFF: NDCG vs GH")
+        print(" ANÁLISE DE TRADE-OFF: NDCG vs ILS")
         print("="*70)
     
     # Carregar dados
@@ -159,12 +159,12 @@ def analyze_tradeoff(
     else:
         raise ValueError("Nenhuma métrica de ranking encontrada (ndcg_mean ou rmse_mean)")
     
-    diversity_col = 'gh_mean'
+    diversity_col = 'ils_mean'
     
     if verbose:
         print(f"[OK] {len(df)} combinações carregadas")
         print(f"    Métrica: {metric_print}")
-        print(f"    Diversidade: GH")
+        print(f"    Diversidade: ILS")
         print(f"    Algoritmos: {sorted(df['algorithm'].unique())}")
         print(f"    Dimensões: {sorted(df['d'].unique())}")
     
@@ -205,7 +205,7 @@ def analyze_tradeoff(
             for _, row in df_tradeoff.iterrows():
                 print(f"    α={row['alpha']:.2f}: d*={int(row['dim_optimal']):2d}, "
                       f"{metric_print}={row[metric_label]:.4f}, "
-                      f"GH={row['GH']:.4f}, "
+                      f"ILS={row['ILS']:.4f}, "
                       f"trade-off={row['tradeoff']:.4f}")
     
     # Salvar resultados
@@ -280,7 +280,7 @@ def analyze_tradeoff(
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Análise de trade-off entre NDCG e GH',
+        description='Análise de trade-off entre NDCG e ILS',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )

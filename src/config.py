@@ -74,7 +74,7 @@ SVD_CONFIG = {
     "use_tfidf_on_binary": True,       # TF-IDF nas binárias antes do SVD (muito útil p/ entidades raras)
 
     # Pós-processamento
-    "normalize_l2": True,              # ótimo se você usa cosseno em GH/MMR/TD
+    "normalize_l2": True,              # ótimo se você usa cosseno em ILS/MMR/TD
 
     # Reprodutibilidade
     "random_state": RANDOM_SEED,

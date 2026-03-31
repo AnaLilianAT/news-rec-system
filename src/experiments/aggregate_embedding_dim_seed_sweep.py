@@ -5,7 +5,7 @@ Agrega resultados do sweep dimensao x seed por (d, algorithm).
 Entrada: outputs/experiments/embedding_dim_seed_sweep_runs.parquet
 Saida: outputs/experiments/embedding_dim_seed_sweep_agg.parquet
 
-Calcula media, std e IC95 para ranking metric (RMSE ou NDCG) e GH por (d, algorithm).
+Calcula media, std e IC95 para ranking metric (RMSE ou NDCG) e ILS por (d, algorithm).
 IC95 = mean +/- 1.96 * (std / sqrt(n))
 """
 
@@ -65,13 +65,13 @@ def aggregate_sweep_results(df_runs: pd.DataFrame, expected_n_seeds: int = 20) -
     agg_stats = df_runs.groupby(['d', 'algorithm']).agg({
         'seed': 'count',  # n_seeds
         ranking_col: ['mean', 'std'],
-        'gh_list': ['mean', 'std']
+        'ils_list': ['mean', 'std']
     }).reset_index()
     
     # Flatten column names
     agg_stats.columns = ['d', 'algorithm', 'n_seeds', 
                          f'{ranking_col}_mean', f'{ranking_col}_std', 
-                         'gh_mean', 'gh_std']
+                         'ils_mean', 'ils_std']
     
     # Validar n_seeds
     invalid_seeds = agg_stats[agg_stats['n_seeds'] != expected_n_seeds]
@@ -90,19 +90,19 @@ def aggregate_sweep_results(df_runs: pd.DataFrame, expected_n_seeds: int = 20) -
     agg_stats[f'{ranking_col}_ci95_low'] = [x[0] for x in ci95_results]
     agg_stats[f'{ranking_col}_ci95_high'] = [x[1] for x in ci95_results]
     
-    # Calcular IC95 para GH
-    ci95_results_gh = agg_stats.apply(
-        lambda row: calculate_ci95(row['gh_mean'], row['gh_std'], row['n_seeds']),
+    # Calcular IC95 para ILS
+    ci95_results_ils = agg_stats.apply(
+        lambda row: calculate_ci95(row['ils_mean'], row['ils_std'], row['n_seeds']),
         axis=1
     )
-    agg_stats['gh_ci95_low'] = [x[0] for x in ci95_results_gh]
-    agg_stats['gh_ci95_high'] = [x[1] for x in ci95_results_gh]
+    agg_stats['ils_ci95_low'] = [x[0] for x in ci95_results_ils]
+    agg_stats['ils_ci95_high'] = [x[1] for x in ci95_results_ils]
     
     # Reordenar colunas
     agg_stats = agg_stats[[
         'd', 'algorithm', 'n_seeds',
         f'{ranking_col}_mean', f'{ranking_col}_std', f'{ranking_col}_ci95_low', f'{ranking_col}_ci95_high',
-        'gh_mean', 'gh_std', 'gh_ci95_low', 'gh_ci95_high'
+        'ils_mean', 'ils_std', 'ils_ci95_low', 'ils_ci95_high'
     ]]
     
     print(f"[OK] Agregacao completa: {len(agg_stats)} linhas")
@@ -227,7 +227,7 @@ def main():
     print(f"[OK] {len(df_runs)} runs carregadas")
     
     # Validar colunas necessarias
-    required_cols = ['d', 'algorithm', 'seed', 'gh_list']
+    required_cols = ['d', 'algorithm', 'seed', 'ils_list']
     if 'rmse' not in df_runs.columns and 'ndcg' not in df_runs.columns:
         print(f"[X] Erro: DataFrame deve conter coluna 'rmse' ou 'ndcg'")
         return 1
@@ -278,10 +278,10 @@ def main():
         print(f"  Melhor (max): {df_agg[f'{ranking_col}_mean'].max():.4f}")
         print(f"  Pior (min): {df_agg[f'{ranking_col}_mean'].min():.4f}")
     
-    print(f"\nGH (diversidade):")
-    print(f"  Media global: {df_agg['gh_mean'].mean():.4f}")
-    print(f"  Melhor (max): {df_agg['gh_mean'].max():.4f}")
-    print(f"  Pior (min): {df_agg['gh_mean'].min():.4f}")
+    print(f"\nILS (diversidade):")
+    print(f"  Media global: {df_agg['ils_mean'].mean():.4f}")
+    print(f"  Melhor (max): {df_agg['ils_mean'].max():.4f}")
+    print(f"  Pior (min): {df_agg['ils_mean'].min():.4f}")
     
     print("\n" + "="*70)
     print(" AGREGACAO CONCLUIDA")

@@ -106,19 +106,19 @@ def compute_jaccard(set_a, set_b):
     return intersection / union
 
 
-def compute_GH_interaction_jaccard(
+def compute_ILS_interaction_jaccard(
     eval_pairs: pd.DataFrame,
     topics: pd.DataFrame,
     representation_type: str = 'bin_topics',
     output_dir: str = 'outputs'
 ) -> pd.DataFrame:
     """
-    Calcula GH (Jaccard) para itens recomendados e interagidos (Tabela 6.1).
+    Calcula ILS (Jaccard) para itens recomendados e interagidos (Tabela 6.1).
     
     Para cada usuário:
     - Pegar itens expostos (do eval_pairs)
     - Calcular Jaccard entre todos os pares de itens (usando tópicos)
-    - GH_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
+    - ILS_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
     
     IMPORTANTE: Usa normalização por |R| (não por #pares) para reproduzir escala da tese.
     
@@ -129,17 +129,17 @@ def compute_GH_interaction_jaccard(
         output_dir: Diretório base dos outputs
     
     Returns:
-        DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
+        DataFrame com colunas: [user_id, algorithm, ils_jaccard_interaction, n_items]
     """
     # Se usando representação binária (modo atual), usar código original
     if representation_type == 'bin_topics':
-        return _compute_GH_interaction_jaccard_legacy(eval_pairs, topics)
+        return _compute_ILS_interaction_jaccard_legacy(eval_pairs, topics)
     
     # Futuramente: suportar embeddings com cosine
     # elif representation_type == 'ae_topics':
     #     topics_rep = get_item_representation(representation_type, output_dir=output_dir)
     #     topic_vectors = prepare_item_vectors(topics_rep)
-    #     return _compute_GH_interaction_cosine(eval_pairs, topic_vectors)
+    #     return _compute_ILS_interaction_cosine(eval_pairs, topic_vectors)
     
     else:
         raise ValueError(
@@ -148,21 +148,21 @@ def compute_GH_interaction_jaccard(
         )
 
 
-def _compute_GH_interaction_jaccard_legacy(eval_pairs: pd.DataFrame, topics: pd.DataFrame) -> pd.DataFrame:
+def _compute_ILS_interaction_jaccard_legacy(eval_pairs: pd.DataFrame, topics: pd.DataFrame) -> pd.DataFrame:
     """
-    Implementação original de GH com Jaccard sobre tópicos binários.
+    Implementação original de ILS com Jaccard sobre tópicos binários.
     
     Mantida intacta para garantir compatibilidade de resultados.
     
     Para cada usuário:
     - Pegar itens expostos (do eval_pairs)
     - Calcular Jaccard entre todos os pares de itens (usando tópicos)
-    - GH_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
+    - ILS_user = soma(Jaccard) / |R| (normalização da Equação 4.3 da tese)
     
     IMPORTANTE: Usa normalização por |R| (não por #pares) para reproduzir escala da tese.
     
     Returns:
-        DataFrame com colunas: [user_id, algorithm, gh_jaccard_interaction, n_items]
+        DataFrame com colunas: [user_id, algorithm, ils_jaccard_interaction, n_items]
     """
     # Preparar tópicos
     topics_dict = {}
@@ -194,12 +194,12 @@ def _compute_GH_interaction_jaccard_legacy(eval_pairs: pd.DataFrame, topics: pd.
         
         if len(jaccards) > 0:
             # CORREÇÃO: Normalizar por |R| (Equação 4.3 da tese), não por #pares
-            # GH_user = (1/|R|) × Σ_{i<j} Jaccard(i,j)
-            gh_user = np.sum(jaccards) / len(items)
+            # ILS_user = (1/|R|) × Σ_{i<j} Jaccard(i,j)
+            ils_user = np.sum(jaccards) / len(items)
             results.append({
                 'user_id': user_id,
                 'algorithm': algorithm,
-                'gh_jaccard_interaction': gh_user,
+                'ils_jaccard_interaction': ils_user,
                 'n_items': len(items)
             })
     
@@ -222,20 +222,20 @@ def compute_cosine_similarity(vec_a, vec_b):
     return np.dot(vec_a, vec_b) / (norm_a * norm_b)
 
 
-def compute_GH_lists_cosine(
+def compute_ILS_lists_cosine(
     reclists: pd.DataFrame,
     features: pd.DataFrame,
     representation_type: str = 'bin_features',
     output_dir: str = 'outputs'
 ) -> pd.DataFrame:
     """
-    Calcula GH (cosseno) para listas de recomendação (Tabela 6.6).
+    Calcula ILS (cosseno) para listas de recomendação (Tabela 6.6).
     
     Para cada lista top-20:
     - Calcular cosseno entre todos os pares de itens (usando features)
-    - GH_list = média dos cossenos
+    - ILS_list = média dos cossenos
     
-    Depois agregar por usuário: GH_user = média das GH_list do usuário
+    Depois agregar por usuário: ILS_user = média das ILS_list do usuário
     
     Args:
         reclists: DataFrame com listas top-20
@@ -244,17 +244,17 @@ def compute_GH_lists_cosine(
         output_dir: Diretório base dos outputs
     
     Returns:
-        DataFrame com colunas: [user_id, algorithm, gh_cosine_lists, n_lists]
+        DataFrame com colunas: [user_id, algorithm, ils_cosine_lists, n_lists]
     """
     # Se usando representação binária (modo atual), usar código original
     if representation_type == 'bin_features':
-        return _compute_GH_lists_cosine_legacy(reclists, features)
+        return _compute_ILS_lists_cosine_legacy(reclists, features)
     
     # Futuramente: suportar embeddings
     # elif representation_type == 'ae_features':
     #     features_rep = get_item_representation(representation_type, output_dir=output_dir)
     #     feature_vectors = prepare_item_vectors(features_rep)
-    #     return _compute_GH_lists_cosine_with_vectors(reclists, feature_vectors)
+    #     return _compute_ILS_lists_cosine_with_vectors(reclists, feature_vectors)
     
     else:
         raise ValueError(
@@ -263,14 +263,14 @@ def compute_GH_lists_cosine(
         )
 
 
-def _compute_GH_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+def _compute_ILS_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
     """
-    Implementação original de GH com cosseno sobre features binárias.
+    Implementação original de ILS com cosseno sobre features binárias.
     
     Mantida intacta para garantir compatibilidade de resultados.
     
     Returns:
-        DataFrame com colunas: [user_id, algorithm, gh_cosine_lists, n_lists]
+        DataFrame com colunas: [user_id, algorithm, ils_cosine_lists, n_lists]
     """
     # Preparar features como vetores
     features_dict = {}
@@ -302,11 +302,11 @@ def _compute_GH_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFra
             cosines.append(cos)
         
         if len(cosines) > 0:
-            gh_list = np.mean(cosines)
+            ils_list = np.mean(cosines)
             list_results.append({
                 'user_id': user_id,
                 'algorithm': algorithm,
-                'gh_list': gh_list
+                'ils_list': ils_list
             })
     
     df_lists = pd.DataFrame(list_results)
@@ -314,26 +314,26 @@ def _compute_GH_lists_cosine_legacy(reclists: pd.DataFrame, features: pd.DataFra
     # Agregar por usuário
     if len(df_lists) > 0:
         for (user_id, algorithm), group in df_lists.groupby(['user_id', 'algorithm']):
-            gh_user = group['gh_list'].mean()
+            ils_user = group['ils_list'].mean()
             n_lists = len(group)
             results.append({
                 'user_id': user_id,
                 'algorithm': algorithm,
-                'gh_cosine_lists': gh_user,
+                'ils_cosine_lists': ils_user,
                 'n_lists': n_lists
             })
     
     return pd.DataFrame(results)
 
 
-def compute_GH_lists_cosine_global(
+def compute_ILS_lists_cosine_global(
     reclists: pd.DataFrame,
     features: pd.DataFrame,
     output_dir: Path = Path('outputs'),
     representation_type: str = 'bin_features'
 ) -> pd.DataFrame:
     """
-    Calcula GH (cosseno) global por algoritmo (sem agregar por usuário primeiro).
+    Calcula ILS (cosseno) global por algoritmo (sem agregar por usuário primeiro).
     
     Args:
         reclists: DataFrame de listas de recomendação
@@ -342,10 +342,10 @@ def compute_GH_lists_cosine_global(
         representation_type: Tipo de representação
     
     Returns:
-        DataFrame com colunas: [algorithm, gh_cosine_lists, n_lists]
+        DataFrame com colunas: [algorithm, ils_cosine_lists, n_lists]
     """
     if representation_type == 'bin_features':
-        return _compute_GH_lists_cosine_global_legacy(reclists, features)
+        return _compute_ILS_lists_cosine_global_legacy(reclists, features)
     else:
         raise ValueError(
             f"Representação não suportada: '{representation_type}'. "
@@ -353,14 +353,14 @@ def compute_GH_lists_cosine_global(
         )
 
 
-def _compute_GH_lists_cosine_global_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
+def _compute_ILS_lists_cosine_global_legacy(reclists: pd.DataFrame, features: pd.DataFrame) -> pd.DataFrame:
     """
-    Implementação global de GH com cosseno sobre features binárias.
+    Implementação global de ILS com cosseno sobre features binárias.
     
     Agrega diretamente por algoritmo sem passar por usuário.
     
     Returns:
-        DataFrame com colunas: [algorithm, gh_cosine_lists, n_lists]
+        DataFrame com colunas: [algorithm, ils_cosine_lists, n_lists]
     """
     # Preparar features como vetores
     features_dict = {}
@@ -390,10 +390,10 @@ def _compute_GH_lists_cosine_global_legacy(reclists: pd.DataFrame, features: pd.
             cosines.append(cos)
         
         if len(cosines) > 0:
-            gh_list = np.mean(cosines)
+            ils_list = np.mean(cosines)
             list_results.append({
                 'algorithm': algorithm,
-                'gh_list': gh_list
+                'ils_list': ils_list
             })
     
     df_lists = pd.DataFrame(list_results)
@@ -402,11 +402,11 @@ def _compute_GH_lists_cosine_global_legacy(reclists: pd.DataFrame, features: pd.
     results = []
     if len(df_lists) > 0:
         for algorithm, group in df_lists.groupby('algorithm'):
-            gh_global = group['gh_list'].mean()  # Média de todas as listas do algoritmo
+            ils_global = group['ils_list'].mean()  # Média de todas as listas do algoritmo
             n_lists = len(group)
             results.append({
                 'algorithm': algorithm,
-                'gh_cosine_lists': gh_global,
+                'ils_cosine_lists': ils_global,
                 'n_lists': n_lists
             })
     

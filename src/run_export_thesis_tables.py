@@ -2,8 +2,8 @@
 Script para gerar tabelas no formato exato da tese.
 
 Gera:
-- outputs/tabela_6_1_GH_interacao.csv (GH Jaccard - itens interagidos)
-- outputs/tabela_6_6_GH_listas.csv (GH Cosseno - listas)
+- outputs/tabela_6_1_ILS_interacao.csv (ILS Jaccard - itens interagidos)
+- outputs/tabela_6_6_ILS_listas.csv (ILS Cosseno - listas)
 - outputs/tabela_6_3_RMSE.csv (RMSE por usuário)
 - outputs/reports/thesis_format_report.md (documentação)
 """
@@ -18,9 +18,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from . import format_like_thesis
 
 normalize_algorithm_name = format_like_thesis.normalize_algorithm_name
-compute_GH_interaction_jaccard = format_like_thesis.compute_GH_interaction_jaccard
-compute_GH_lists_cosine = format_like_thesis.compute_GH_lists_cosine
-compute_GH_lists_cosine_global = format_like_thesis.compute_GH_lists_cosine_global
+compute_ILS_interaction_jaccard = format_like_thesis.compute_ILS_interaction_jaccard
+compute_ILS_lists_cosine = format_like_thesis.compute_ILS_lists_cosine
+compute_ILS_lists_cosine_global = format_like_thesis.compute_ILS_lists_cosine_global
 compute_RMSE_user = format_like_thesis.compute_RMSE_user
 compute_RMSE_global = format_like_thesis.compute_RMSE_global
 compute_NDCG_user = format_like_thesis.compute_NDCG_user
@@ -124,33 +124,33 @@ def process_representation(
     report_lines.append(f"Algoritmos: {', '.join(algorithms)}\n")
     
     # ========================================================================
-    # TABELA 6.1: GH (itens recomendados e interagidos) - Jaccard
+    # TABELA 6.1: ILS (itens recomendados e interagidos) - Jaccard
     # ========================================================================
     print("\n" + "=" * 80)
-    print("TABELA 6.1: GH (Jaccard) - Itens Recomendados e Interagidos")
+    print("TABELA 6.1: ILS (Jaccard) - Itens Recomendados e Interagidos")
     print("=" * 80)
     
-    print("Calculando GH por usuário usando Jaccard entre tópicos...")
-    df_gh_interaction = compute_GH_interaction_jaccard(eval_pairs, topics)
+    print("Calculando ILS por usuário usando Jaccard entre tópicos...")
+    df_ils_interaction = compute_ILS_interaction_jaccard(eval_pairs, topics)
     
-    if len(df_gh_interaction) == 0:
-        print("AVISO: Nenhum usuário com >= 2 itens para calcular GH (interação)")
-        report_lines.append("## Tabela 6.1: GH (Jaccard - Interação)\n")
+    if len(df_ils_interaction) == 0:
+        print("AVISO: Nenhum usuário com >= 2 itens para calcular ILS (interação)")
+        report_lines.append("## Tabela 6.1: ILS (Jaccard - Interação)\n")
         report_lines.append("Nenhum dado disponível\n")
     else:
-        print(f"  - {len(df_gh_interaction)} usuários com GH calculado")
+        print(f"  - {len(df_ils_interaction)} usuários com ILS calculado")
         
         # Estatísticas por algoritmo
         table_6_1 = aggregate_like_thesis(
-            df_gh_interaction,
-            metric_col='gh_jaccard_interaction',
+            df_ils_interaction,
+            metric_col='ils_jaccard_interaction',
             include_users=True,
             include_minmax=False
         )
         
         # Formatar e exportar
         table_6_1_formatted = format_table_for_export(table_6_1, decimal_places=3)
-        output_path_6_1 = tables_dir / f"tabela_6_1_GH_interacao{output_suffix}.csv"
+        output_path_6_1 = tables_dir / f"tabela_6_1_ILS_interacao{output_suffix}.csv"
         table_6_1_formatted.to_csv(output_path_6_1, index=False)
         
         print(f"\nTabela salva em: {output_path_6_1}")
@@ -158,7 +158,7 @@ def process_representation(
         print(table_6_1_formatted.to_string(index=False))
         
         # Adicionar ao relatório
-        report_lines.append("## Tabela 6.1: GH (Jaccard - Interação)\n")
+        report_lines.append("## Tabela 6.1: ILS (Jaccard - Interação)\n")
         report_lines.append(f"Arquivo: `{output_path_6_1.name}`\n")
         report_lines.append("### Usuários por algoritmo:\n")
         for _, row in table_6_1.iterrows():
@@ -168,65 +168,65 @@ def process_representation(
         
         # Exclusões
         total_users = eval_pairs['user_id'].nunique()
-        included_users = len(df_gh_interaction)
+        included_users = len(df_ils_interaction)
         excluded = total_users - included_users
         report_lines.append(f"\n**Usuários excluídos**: {excluded} (< 2 itens expostos)\n")
     
     # ========================================================================
-    # TABELA 6.6: GH (listas de recomendação) - Cosseno
+    # TABELA 6.6: ILS (listas de recomendação) - Cosseno
     # ========================================================================
     print("\n" + "=" * 80)
-    print("TABELA 6.6: GH (Cosseno) - Listas de Recomendação")
+    print("TABELA 6.6: ILS (Cosseno) - Listas de Recomendação")
     print("=" * 80)
     
     if aggregate_by_user:
-        print("Calculando GH por usuário usando cosseno entre features...")
-        df_gh_lists = compute_GH_lists_cosine(reclists, features)
+        print("Calculando ILS por usuário usando cosseno entre features...")
+        df_ils_lists = compute_ILS_lists_cosine(reclists, features)
     else:
-        print("Calculando GH global usando cosseno entre features...")
+        print("Calculando ILS global usando cosseno entre features...")
         # Primeiro calcula por usuário, depois agrega por algoritmo
-        df_gh_lists_per_user = compute_GH_lists_cosine(reclists, features)
+        df_ils_lists_per_user = compute_ILS_lists_cosine(reclists, features)
         
         # Agregar por algoritmo (global)
         results = []
-        for algorithm, group in df_gh_lists_per_user.groupby('algorithm'):
+        for algorithm, group in df_ils_lists_per_user.groupby('algorithm'):
             # Média ponderada pelo número de listas de cada usuário
             total_lists = group['n_lists'].sum()
-            weighted_gh = (group['gh_cosine_lists'] * group['n_lists']).sum() / total_lists
+            weighted_ils = (group['ils_cosine_lists'] * group['n_lists']).sum() / total_lists
             results.append({
                 'algorithm': algorithm,
-                'gh_cosine_lists': weighted_gh,
+                'ils_cosine_lists': weighted_ils,
                 'n_lists': int(total_lists)
             })
-        df_gh_lists = pd.DataFrame(results)
+        df_ils_lists = pd.DataFrame(results)
     
-    if len(df_gh_lists) == 0:
-        print("AVISO: Nenhuma lista com >= 2 itens para calcular GH (listas)")
-        report_lines.append("## Tabela 6.6: GH (Cosseno - Listas)\n")
+    if len(df_ils_lists) == 0:
+        print("AVISO: Nenhuma lista com >= 2 itens para calcular ILS (listas)")
+        report_lines.append("## Tabela 6.6: ILS (Cosseno - Listas)\n")
         report_lines.append("Nenhum dado disponível\n")
     else:
         if aggregate_by_user:
-            print(f"  - {len(df_gh_lists)} usuários com GH calculado")
+            print(f"  - {len(df_ils_lists)} usuários com ILS calculado")
             
             # Estatísticas por algoritmo (com coluna Usuários)
             table_6_6 = aggregate_like_thesis(
-                df_gh_lists,
-                metric_col='gh_cosine_lists',
+                df_ils_lists,
+                metric_col='ils_cosine_lists',
                 include_users=True,
                 include_minmax=False
             )
         else:
-            print(f"  - GH global calculado para {len(df_gh_lists)} algoritmos")
+            print(f"  - ILS global calculado para {len(df_ils_lists)} algoritmos")
             
             # Formatação global
             table_6_6 = aggregate_global(
-                df_gh_lists,
-                metric_col='gh_cosine_lists'
+                df_ils_lists,
+                metric_col='ils_cosine_lists'
             )
         
         # Formatar e exportar
         table_6_6_formatted = format_table_for_export(table_6_6, decimal_places=3)
-        output_path_6_6 = tables_dir / f"tabela_6_6_GH_listas{output_suffix}.csv"
+        output_path_6_6 = tables_dir / f"tabela_6_6_ILS_listas{output_suffix}.csv"
         table_6_6_formatted.to_csv(output_path_6_6, index=False)
         
         print(f"\nTabela salva em: {output_path_6_6}")
@@ -234,7 +234,7 @@ def process_representation(
         print(table_6_6_formatted.to_string(index=False))
         
         # Adicionar ao relatório
-        report_lines.append("## Tabela 6.6: GH (Cosseno - Listas)\n")
+        report_lines.append("## Tabela 6.6: ILS (Cosseno - Listas)\n")
         report_lines.append(f"Arquivo: `{output_path_6_6.name}`\n")
         
         if aggregate_by_user and 'Usuários' in table_6_6.columns:
@@ -247,7 +247,7 @@ def process_representation(
             # Exclusões
             total_lists = len(reclists)
             total_users_lists = reclists['user_id'].nunique()
-            included_users_lists = len(df_gh_lists)
+            included_users_lists = len(df_ils_lists)
             excluded_lists = total_users_lists - included_users_lists
             report_lines.append(f"\n**Usuários excluídos**: {excluded_lists} (listas com < 2 itens válidos)\n")
         else:

@@ -5,7 +5,7 @@ Sweep de dimensao de embedding x seed para analise de variabilidade.
 Suporta autoencoder (ae) e truncated SVD (svd).
 
 Output: outputs/experiments/embedding_dim_seed_sweep_runs.parquet
-Colunas: [d, seed, algorithm, rmse, gh_list, embedding_cache_key, runtime_sec, timestamp]
+Colunas: [d, seed, algorithm, rmse, ils_list, embedding_cache_key, runtime_sec, timestamp]
 
 Uso:
     python -m src.experiments.run_embedding_dim_seed_sweep --dims 13 18 --n-seeds 2
@@ -158,7 +158,7 @@ def run_pipeline(d: int, seed: int, method: str = 'ae', aggregate_by_user: bool 
 
 
 def collect_metrics(d: int, seed: int, method: str, cache_key: str, ranking_metric: str = 'rmse', ndcg_cutoff: int = 20) -> Optional[pd.DataFrame]:
-    """Coleta metricas de ranking (RMSE ou NDCG) e GH."""
+    """Coleta metricas de ranking (RMSE ou NDCG) e ILS."""
     print(f"[>] Coletando metricas...")
     
     tables_dir = Path('outputs/tabelas')
@@ -174,35 +174,35 @@ def collect_metrics(d: int, seed: int, method: str, cache_key: str, ranking_metr
         ranking_col_user = 'Média'
         ranking_col_global = 'NDCG'
     
-    gh_path = tables_dir / f'tabela_6_6_GH_listas_{suffix}.csv'
+    ils_path = tables_dir / f'tabela_6_6_ILS_listas_{suffix}.csv'
     
-    if not ranking_path.exists() or not gh_path.exists():
+    if not ranking_path.exists() or not ils_path.exists():
         print(f"[X] Arquivos nao encontrados")
         return None
     
     df_ranking = pd.read_csv(ranking_path)
-    df_gh = pd.read_csv(gh_path)
+    df_ils = pd.read_csv(ils_path)
     
     # Detectar se é agregação por usuário (tem 'Média') ou global (tem métrica direto)
     if ranking_col_user in df_ranking.columns:
         # Modo: agregação por usuário
         df_merged = df_ranking[['Algoritmo', ranking_col_user]].merge(
-            df_gh[['Algoritmo', 'Média']], on='Algoritmo', suffixes=('_rank', '_gh')
+            df_ils[['Algoritmo', 'Média']], on='Algoritmo', suffixes=('_rank', '_ils')
         )
         df_merged = df_merged.rename(columns={
             'Algoritmo': 'algorithm', 
             f'{ranking_col_user}_rank': ranking_metric, 
-            f'{ranking_col_user}_gh': 'gh_list'
+            f'{ranking_col_user}_ils': 'ils_list'
         })
     else:
         # Modo: agregação global
         df_merged = df_ranking[['Algoritmo', ranking_col_global]].merge(
-            df_gh[['Algoritmo', 'GH_COSINE_LISTS']], on='Algoritmo'
+            df_ils[['Algoritmo', 'ILS_COSINE_LISTS']], on='Algoritmo'
         )
         df_merged = df_merged.rename(columns={
             'Algoritmo': 'algorithm', 
             ranking_col_global: ranking_metric, 
-            'GH_COSINE_LISTS': 'gh_list'
+            'ILS_COSINE_LISTS': 'ils_list'
         })
     
     df_merged['d'] = d
@@ -210,7 +210,7 @@ def collect_metrics(d: int, seed: int, method: str, cache_key: str, ranking_metr
     df_merged['embedding_cache_key'] = cache_key
     df_merged['timestamp'] = datetime.now().isoformat()
     
-    df_merged = df_merged[['d', 'seed', 'algorithm', ranking_metric, 'gh_list', 
+    df_merged = df_merged[['d', 'seed', 'algorithm', ranking_metric, 'ils_list', 
                            'embedding_cache_key', 'timestamp']]
     
     print(f"[OK] {len(df_merged)} algoritmos coletados")
@@ -219,9 +219,15 @@ def collect_metrics(d: int, seed: int, method: str, cache_key: str, ranking_metr
 
 def cleanup_intermediates():
     """Remove arquivos intermediarios."""
-    patterns = ['predictions_assigned_*.parquet', 'reclists_top20_assigned_*.parquet',
-                'eval_pairs_assigned_*.parquet', 'gh_lists_*.parquet',
-                'user_metrics_*.parquet', 'report_assigned_*.md']
+    patterns = [
+        'predictions_assigned_*.parquet',
+        'reclists_top20_assigned_*.parquet',
+        'eval_pairs_assigned_*.parquet',
+        'ils_by_algorithm*.parquet',
+        'ils_jaccard_by_algorithm*.parquet',
+        'user_metrics_assigned*.parquet',
+        'eval_report_assigned*.md'
+    ]
     
     count = 0
     for pattern in patterns:
@@ -261,7 +267,7 @@ def main():
     parser.add_argument('--embedding-method', type=str, choices=['ae', 'svd'],
                        default='svd', help='Método de embedding: ae ou svd (default: svd)')
     parser.add_argument('--global-aggregation', action='store_true',
-                       help='Usar agregação global (sem passar por usuário) para RMSE e GH')
+                       help='Usar agregação global (sem passar por usuário) para RMSE e ILS')
     parser.add_argument('--ranking-metric', type=str, choices=['rmse', 'ndcg'],
                        default='rmse', help='Métrica de ranking: rmse ou ndcg (default: rmse)')
     parser.add_argument('--ndcg-cutoff', type=int, default=20,
