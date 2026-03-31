@@ -49,8 +49,7 @@ python -m src.experiments.aggregate_embedding_dim_seed_sweep
 ### Step 3: Trade-off Analysis
 
 ```bash
-python -m src.experiments.analyze_ndcg_gh_tradeoff
-    --ndcg-cutoff 10
+python -m src.experiments.analyze_ndcg_gh_tradeoff --ndcg-cutoff 10
 ```
 **Outputs:**
 - `outputs/experiments/tradeoff_all_algorithms.csv`
